@@ -18,8 +18,6 @@ const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
 
-// ✅ define a persistent sessions path (Render: mount disk at /data)
-const sessionDir = process.env.SESSIONS_DIR || path.join(process.cwd(), 'data', 'wa-sessions');
 
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
@@ -61,10 +59,10 @@ export function getClient(clientId) {
   console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
 
   const client = new Client({
-    authStrategy: new LocalAuth({
-      dataPath: path.resolve(sessionDir),
-      clientId,
-    }),
+   authStrategy: new LocalAuth({
+  clientId,
+dataPath: process.env.SESSIONS_DIR || '/var/data/wa-sessions'
+}),
     puppeteer: {
       headless: true,
       args: [
