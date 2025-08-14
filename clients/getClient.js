@@ -18,7 +18,6 @@ const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
 
-
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
   if (!serialized) return null;
@@ -53,16 +52,23 @@ function extractOrderNumberFromCorrelation(corr) {
 }
 
 /* -------------------------------- getClient -------------------------------- */
+const sessionsPath = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
+
+// Ensure sessions dir exists
+if (!fs.existsSync(sessionsPath)) {
+  fs.mkdirSync(sessionsPath, { recursive: true });
+}
+
 export function getClient(clientId) {
   if (clients.has(clientId)) return clients.get(clientId);
 
   console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
 
   const client = new Client({
-   authStrategy: new LocalAuth({
-  clientId,
-dataPath: process.env.SESSIONS_DIR || '/var/data/wa-sessions'
-}),
+    authStrategy: new LocalAuth({
+      clientId,
+      dataPath: sessionsPath
+    }),
     puppeteer: {
       headless: true,
       args: [
@@ -77,27 +83,14 @@ dataPath: process.env.SESSIONS_DIR || '/var/data/wa-sessions'
   let qrLogged = false;
   client.on('qr', async (qr) => {
     try {
-      // ❌ REMOVE early return; it suppresses refresh/late joiners:
-      // if (readyFlags.get(clientId)) return;
+      console.log(qrLogged ? `🔄 QR code refreshed for ${clientId}` : `📸 QR received for ${clientId}`);
+      qrLogged = true;
 
-      if (!qrLogged) {
-        console.log(`📸 QR received for ${clientId}`);
-        qrLogged = true;
-      } else {
-        console.log(`🔄 QR code refreshed for ${clientId}`);
-      }
-
-      // 1) Convert & store latest QR
       const qrData = await qrcode.toDataURL(qr);
       qrCodes.set(clientId, qrData);
-
-      // 2) Mark not-ready AFTER storing (so status + sockets can read it)
       readyFlags.set(clientId, false);
-
-      // 3) Emit to any listeners in the room
       global.io?.to(clientId).emit('qr', { qr: qrData });
 
-      // 4) Persist status
       await ClientModel.updateOne(
         { clientId },
         { $set: { sessionStatus: 'pending' } }
@@ -110,6 +103,29 @@ dataPath: process.env.SESSIONS_DIR || '/var/data/wa-sessions'
 
   client.on('authenticated', () => {
     console.log(`🔐 Authenticated: ${clientId}`);
+  });
+
+  // ✅ NEW: Auth failure cleanup
+  client.on('auth_failure', async (msg) => {
+    console.error(`❌ Auth failure for ${clientId}:`, msg);
+    readyFlags.set(clientId, false);
+    qrCodes.delete(clientId);
+
+    const sessionDir = path.join(sessionsPath, `session-${clientId}`);
+    if (fs.existsSync(sessionDir)) {
+      fs.rmSync(sessionDir, { recursive: true, force: true });
+      console.log(`🗑️ Deleted broken session for ${clientId}`);
+    }
+
+    await ClientModel.updateOne(
+      { clientId },
+      { $set: { sessionStatus: 'pending' } }
+    ).catch(() => null);
+
+    setTimeout(() => {
+      console.log(`♻️ Re-initializing client ${clientId} after auth failure`);
+      getClient(clientId);
+    }, 1500);
   });
 
   /* ---------------------------------- Ready --------------------------------- */
@@ -340,7 +356,7 @@ dataPath: process.env.SESSIONS_DIR || '/var/data/wa-sessions'
   client.on('disconnected', async (reason) => {
     console.warn(`🔌 Disconnected (${clientId}): ${reason}`);
     readyFlags.set(clientId, false);
-    qrCodes.delete(clientId); // ✅ ensure fresh QR next init if needed
+    qrCodes.delete(clientId);
 
     await ClientModel.updateOne(
       { clientId },
@@ -351,6 +367,8 @@ dataPath: process.env.SESSIONS_DIR || '/var/data/wa-sessions'
       try { await client.destroy(); } catch {}
       clients.delete(clientId);
       readyFlags.delete(clientId);
+      const sessionDir = path.join(sessionsPath, `session-${clientId}`);
+      if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
       console.log(`🧹 Session cleared for ${clientId} after LOGOUT`);
       return;
     }
@@ -358,16 +376,27 @@ dataPath: process.env.SESSIONS_DIR || '/var/data/wa-sessions'
     setTimeout(async () => {
       try {
         console.log(`♻️ Re-initializing client for ${clientId} after '${reason}'`);
-        await client.initialize(); // LocalAuth will silently restore
+        await client.initialize();
       } catch (e) {
         console.warn(`⚠️ Re-init failed for ${clientId}: ${e?.message}`);
         try { await client.destroy().catch(() => {}); } catch {}
         clients.delete(clientId);
-        const rebuilt = getClient(clientId);
-        console.log(`🧱 Rebuilt client object for ${clientId}:`, !!rebuilt);
+        getClient(clientId);
       }
     }, 1500);
   });
+
+  // ✅ NEW: Watchdog reset if not ready in 30s
+  setTimeout(() => {
+    if (!readyFlags.get(clientId)) {
+      console.warn(`⏳ Client ${clientId} not ready after 30s — resetting`);
+      try { client.destroy(); } catch {}
+      clients.delete(clientId);
+      const sessionDir = path.join(sessionsPath, `session-${clientId}`);
+      if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
+      getClient(clientId);
+    }
+  }, 30000);
 
   client.initialize();
   clients.set(clientId, client);

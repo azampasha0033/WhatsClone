@@ -193,31 +193,45 @@ const startServer = async () => {
   // Optional boot auto-init (env toggle)
   const AUTO_INIT_CLIENTS = process.env.AUTO_INIT_CLIENTS === 'true';
   if (AUTO_INIT_CLIENTS) {
-    try {
-      const active = await ClientModel.find({ sessionStatus: 'connected' }, 'clientId');
-      console.log(`🔁 Found ${active.length} active client(s) to initialize...`);
-      await Promise.all(
-        active.map(async ({ clientId }) => {
-          try {
-            await getClient(clientId);
-             const ready = isClientReady(clientId);
-            if (!ready) {
-              console.warn(`⚠️ Client ${clientId} is not ready after auto-init.`);
-              return;
-            }
+  try {
+    const active = await ClientModel.find({}, 'clientId sessionStatus');
+    console.log(`🔁 Found ${active.length} active client(s) to initialize...`);
 
-            console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
-          } catch (err) {
-            console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
-          }
-        })
-      );
-    } catch (err) {
-      console.error('❌ Error fetching clients on startup:', err.message);
+    for (const { clientId } of active) {
+      try {
+        const client = await getClient(clientId); // this will set up LocalAuth
+        client.on('qr', (qr) => {
+          console.log(`📸 QR for client ${clientId}: ${qr.substring(0, 50)}...`);
+          // optional: broadcast to Socket.IO room
+          io.to(clientId).emit('qr', { qr });
+        });
+
+        client.on('ready', () => {
+          console.log(`✅ WhatsApp ready for: ${clientId}`);
+          ClientModel.updateOne({ clientId }, { sessionStatus: 'connected' }).exec();
+        });
+
+        client.on('authenticated', () => {
+          console.log(`🔑 Authenticated for: ${clientId}`);
+        });
+
+        const ready = isClientReady(clientId);
+        if (!ready) {
+          console.warn(`⚠️ Client ${clientId} not yet ready — waiting for QR scan`);
+        } else {
+          console.log(`✅ Client ${clientId} is already connected`);
+        }
+      } catch (err) {
+        console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
+      }
     }
-  } else {
-    console.log('⏸️ Skipping auto-init (AUTO_INIT_CLIENTS=false)');
+  } catch (err) {
+    console.error('❌ Error fetching clients on startup:', err.message);
   }
+} else {
+  console.log('⏸️ Skipping auto-init (AUTO_INIT_CLIENTS=false)');
+}
+
 
   const SOCKET_AUTO_INIT = process.env.SOCKET_AUTO_INIT !== 'false';
 
