@@ -19,7 +19,7 @@ const qrCodes = new Map();
 const readyFlags = new Map();
 
 // ✅ define a persistent sessions path (Render: mount disk at /data)
-const sessionDir = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
+const sessionDir = process.env.SESSIONS_DIR || path.join(process.cwd(), 'data', 'wa-sessions');
 
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
@@ -70,12 +70,7 @@ export function getClient(clientId) {
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-extensions',
-        '--disable-gpu',
-        '--no-zygote',
-        '--single-process',
-        '--js-flags=--expose-gc',
+        '--disable-dev-shm-usage'
       ],
     },
   });
