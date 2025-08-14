@@ -83,9 +83,9 @@ export function getClient(clientId) {
   /* --------------------------------- QR Code -------------------------------- */
   let qrLogged = false;
   client.on('qr', async (qr) => {
-    if (readyFlags.get(clientId)) return;
-    readyFlags.set(clientId, false);
 
+      if (readyFlags.get(clientId)) return; // prevents new QR spam after ready
+  readyFlags.set(clientId, false);
 
 
     if (!qrLogged) {
@@ -390,24 +390,41 @@ export function getClient(clientId) {
     }
   });
 
-  /* ------------------------------- Disconnected ----------------------------- */
-  client.on('disconnected', async (reason) => {
-    console.warn(`🔌 Disconnected (${clientId}): ${reason}`);
-    readyFlags.set(clientId, false);
-    await ClientModel.updateOne(
-      { clientId },
-      { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: reason } }
-    ).catch(() => null);
+/* ------------------------------- Disconnected ----------------------------- */
+client.on('disconnected', async (reason) => {
+  console.warn(`🔌 Disconnected (${clientId}): ${reason}`);
+  readyFlags.set(clientId, false);
 
-    // Full recycle on logout/nav for stability
-    if (reason === 'LOGOUT' || reason === 'NAVIGATION') {
-      try { await client.destroy(); } catch {}
+  await ClientModel.updateOne(
+    { clientId },
+    { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: reason } }
+  ).catch(() => null);
+
+  // Hard reset only if user explicitly logged out (QR will be needed again)
+  if (String(reason).toUpperCase() === 'LOGOUT') {
+    try { await client.destroy(); } catch {}
+    clients.delete(clientId);
+    qrCodes.delete(clientId);
+    readyFlags.delete(clientId);
+    console.log(`🧹 Session cleared for ${clientId} after LOGOUT`);
+    return;
+  }
+
+  // Soft reconnect for transient cases like NAVIGATION / network flaps
+  setTimeout(async () => {
+    try {
+      console.log(`♻️ Re-initializing client for ${clientId} after '${reason}'`);
+      await client.initialize();              // LocalAuth will silently restore
+    } catch (e) {
+      console.warn(`⚠️ Re-init failed for ${clientId}: ${e?.message}`);
+      try { await client.destroy().catch(() => {}); } catch {}
       clients.delete(clientId);
-      qrCodes.delete(clientId);
-      readyFlags.delete(clientId);
-      // re-init from outside if needed
+      const rebuilt = getClient(clientId);    // reuse LocalAuth on disk
+      console.log(`🧱 Rebuilt client object for ${clientId}:`, !!rebuilt);
     }
-  });
+  }, 1500);
+});
+
 
   client.initialize();
   clients.set(clientId, client);

@@ -44,7 +44,12 @@ const io = new Server(server, {
 global.io = io;
 
 app.use(cors());
-app.use(express.json());
+//app.use(express.json());
+
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+
 app.use('/api', subscribeRoutes);
 app.use('/subscriptions', subscriptionsStatusRoute);
 app.use('/auth', authRoute);
@@ -73,14 +78,14 @@ app.get('/chats/:clientId', async (req, res) => {
     // If successful, return the chat data as JSON
     return res.json({
       clientId,
-      chats: chats.map(chat => ({
-        id: chat.id._serialized,  // Unique identifier for the chat
-        name: chat.name,          // Name of the contact or group
-        isGroup: chat.isGroup,    // Boolean to indicate if it's a group chat
-        unreadCount: chat.unreadCount,  // Number of unread messages
-        lastMessage: chat.lastMessage ? chat.lastMessage.body : null,  // Last message in the chat
-        timestamp: chat.timestamp // Timestamp of the last message
-      }))
+     chats: chats.map(chat => ({
+  id: chat.id._serialized,
+  name: chat.name,
+  isGroup: chat.isGroup,
+  unreadCount: chat.unreadCount,
+  lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
+  timestamp: chat.lastMessage ? chat.lastMessage.timestamp : null
+}))
     });
 
   } catch (err) {
@@ -113,23 +118,35 @@ app.get('/messages/:clientId/:chatId', async (req, res) => {
     rawMessages.sort((a, b) => {
       const ta = a.timestamp || 0; // seconds since epoch
       const tb = b.timestamp || 0;
-      return order === 'desc' ? (ta - tb) : (tb - ta);
+      return order === 'desc' ? (tb - ta) : (ta - tb); 
     });
 
     // Process each message and handle media types
-    const processedMessages = await Promise.all(rawMessages.map(async (message) => {
-      const messageData = {
-        id: message.id._serialized,
-        from: message.from,
-        to: message.to,
-        timestamp: message.timestamp,                            // seconds
-        body: message.body,
-        type: message.type,
-        isQuoted: message.hasQuotedMsg,
-        quotedMessage: message.quotedMsg ? message.quotedMsg.body : null,
-        mediaUrl: null,
-        mediaInfo: null,
-      };
+  const processedMessages = await Promise.all(rawMessages.map(async (message) => {
+
+  // ✅ SAFER quoted message fetch
+  let quotedMessage = null;
+  try {
+    if (message.hasQuotedMsg && typeof message.getQuotedMessage === 'function') {
+      const qm = await message.getQuotedMessage();
+      quotedMessage = qm?.body ?? null;
+    }
+  } catch {}
+
+  const messageData = {
+    id: message.id._serialized,
+    from: message.from,
+    to: message.to,
+    timestamp: message.timestamp,
+    body: message.body,
+    type: message.type,
+    isQuoted: message.hasQuotedMsg,
+    quotedMessage, // <-- now from safe fetch above
+    mediaUrl: null,
+    mediaInfo: null,
+  };
+
+  // ... keep your existing media handling code below ...
 
       if (message.hasMedia) {
         try {
