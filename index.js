@@ -200,6 +200,12 @@ const startServer = async () => {
         active.map(async ({ clientId }) => {
           try {
             await getClient(clientId);
+             const ready = isClientReady(clientId);
+            if (!ready) {
+              console.warn(`⚠️ Client ${clientId} is not ready after auto-init.`);
+              return;
+            }
+
             console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
           } catch (err) {
             console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
