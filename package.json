@@ -1,0 +1,25 @@
+{
+  "name": "whatsapp-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon --ignore sessions --ignore ./sessions --ignore node_modules --ext js,mjs,cjs,json index.js"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.2.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.17.0",
+    "node-cache": "^5.1.2",
+    "nodemon": "^3.1.10",
+    "puppeteer": "^24.16.1",
+    "puppeteer-core": "^23.7.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1",
+    "whatsapp-web.js": "github:alechkos/whatsapp-web.js#fix-poll-vote-event"
+  }
+}

@@ -1,0 +1,20 @@
+cd "F:\Core Files"
+
+# Create/ensure a good .gitignore
+@"
+# Node
+/node_modules/
+.env
+.env.*
+# WhatsApp / puppeteer sessions & cache
+/sessions/
+/.wwebjs_cache/
+# Logs
+*.log
+"@ | Out-File -Encoding utf8 .gitignore
+
+# Stop tracking anything already added that should be ignored
+git rm -r --cached node_modules sessions .wwebjs_cache 2>$null
+
+git add -A
+git commit -m "chore: ignore node_modules and WA session/cache files"
