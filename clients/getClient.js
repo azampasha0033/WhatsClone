@@ -86,7 +86,11 @@ export function getClient(clientId) {
 
       if (readyFlags.get(clientId)) return; // prevents new QR spam after ready
   readyFlags.set(clientId, false);
-    
+    if (qrCodes.has(clientId) && qrCodes.get(clientId) === null) {
+      console.log(`🔄 QR code refreshed for ${clientId}`);
+    } else {
+      console.log(`📸 New QR code for ${clientId}`);
+    }
 
     if (!qrLogged) {
       console.log(`📸 QR received for ${clientId}`);
@@ -95,7 +99,7 @@ export function getClient(clientId) {
 
     const qrData = await qrcode.toDataURL(qr);
 
-    console.log(qrData);
+   // console.log(qrData);
     qrCodes.set(clientId, qrData);
     global.io?.to(clientId).emit('qr', { qr: qrData });
 
