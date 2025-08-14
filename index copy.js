@@ -165,46 +165,60 @@ app.post('/send-confirmation', async (req, res) => {
 
 
 app.get('/chats/:clientId', async (req, res) => {
-  const { clientId } = req.params;
-  const client = getClient(clientId);
-
-  if (!readyFlags.get(clientId)) {
-    return res.status(400).send({ error: 'Client not ready' });
-  }
-
   try {
-    const chats = await client.getChats();
-    res.send({ success: true, chats });
+    const clientId = req.params.clientId;
+
+    if (!assertClientReadyOrReply(clientId, res)) return; // check first
+
+    const client = getClient(clientId); // now safe: already initialized & ready
+    // small retry stays the same
+    const chats = await client.getChats().catch(async (e) => {
+      console.warn('getChats failed once, retrying in 300ms:', e?.message);
+      await new Promise(r => setTimeout(r, 300));
+      return client.getChats();
+    });
+
+    return res.json({
+      clientId,
+      chats: chats.map(c => ({
+        id: c.id._serialized,
+        name: c.name,
+        isGroup: c.isGroup,
+        unreadCount: c.unreadCount,
+        lastMessage: c.lastMessage ? c.lastMessage.body : null,
+        timestamp: c.lastMessage ? c.lastMessage.timestamp : null
+      }))
+    });
   } catch (err) {
-    res.status(500).send({ error: err.message });
+    console.error(`❌ Error fetching chats for ${req.params.clientId}:`, err);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 app.get('/messages/:clientId/:chatId', async (req, res) => {
-  const { clientId, chatId } = req.params;
-  const client = getClient(clientId);
-
-  if (!readyFlags.get(clientId)) {
-    return res.status(400).send({ error: 'Client not ready' });
-  }
-
   try {
+    const { clientId, chatId } = req.params;
+    const order = (req.query.order || 'desc').toLowerCase();
+    const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
+
+    if (!assertClientReadyOrReply(clientId, res)) return; // check first
+
+    const client = getClient(clientId); // now safe
     const chat = await client.getChatById(chatId);
-    const messages = await chat.fetchMessages({ limit: 50 });
+    if (!chat) return res.status(404).json({ error: `Chat ${chatId} not found.` });
 
-    const formatted = messages.map((m) => ({
-      id: m.id._serialized,
-      body: m.body,
-      type: m.type,
-      fromMe: m.fromMe,
-      timestamp: m.timestamp,
-    }));
+    const raw = await chat.fetchMessages({ limit });
+    raw.sort((a,b) => (order === 'desc' ? (b.timestamp||0)-(a.timestamp||0) : (a.timestamp||0)-(b.timestamp||0)));
 
-    res.send({ success: true, messages: formatted });
+    // ⚠️ Don't forget to send a response (your comment says "processing stays the same")
+    // res.json({ clientId, chatId, ...messages... });
   } catch (err) {
-    res.status(500).send({ error: err.message });
+    console.error(`❌ Error fetching messages for client ${req.params.clientId}, chat ${req.params.chatId}:`, err);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
