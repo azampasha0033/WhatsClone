@@ -4,8 +4,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon --ignore sessions --ignore ./sessions --ignore node_modules --ext js,mjs,cjs,json index.js"
-  },
+  "dev": "nodemon index.js",       
+  "start": "node index.js"         
+},
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
