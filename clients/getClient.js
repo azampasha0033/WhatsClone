@@ -8,6 +8,8 @@ import { ClientModel } from '../db/clients.js';
 
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
+import fs from 'fs';
+import path from 'path';
 
 // ⬇️ NEW: quota services
 import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
@@ -15,6 +17,7 @@ import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
+const sessionsPath = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
 
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
@@ -62,7 +65,7 @@ export function getClient(clientId) {
 
   const client = new Client({
     authStrategy: new LocalAuth({
-      dataPath: './sessions',
+      dataPath:sessionsPath,
       clientId,
     }),
     puppeteer: {
