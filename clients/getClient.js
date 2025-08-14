@@ -8,6 +8,7 @@ import { ClientModel } from '../db/clients.js';
 
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
+import fs from 'fs';
 import path from 'path';
 
 // ⬇️ NEW: quota services
@@ -18,7 +19,7 @@ const qrCodes = new Map();
 const readyFlags = new Map();
 
 // ✅ define a persistent sessions path (Render: mount disk at /data)
-const SESSIONS_DIR = process.env.SESSIONS_DIR || '/data/wa-sessions';
+//const SESSIONS_DIR = process.env.SESSIONS_DIR || '/data/wa-sessions';
 
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
@@ -61,7 +62,7 @@ export function getClient(clientId) {
 
   const client = new Client({
     authStrategy: new LocalAuth({
-      dataPath: path.resolve(SESSIONS_DIR), // ✅ persistent on Render
+      dataPath: './sessions',
       clientId,
     }),
     puppeteer: {
