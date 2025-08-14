@@ -19,7 +19,7 @@ const qrCodes = new Map();
 const readyFlags = new Map();
 
 // ✅ define a persistent sessions path (Render: mount disk at /data)
-//const SESSIONS_DIR = process.env.SESSIONS_DIR || '/data/wa-sessions';
+const sessionDir = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
 
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
@@ -62,7 +62,7 @@ export function getClient(clientId) {
 
   const client = new Client({
     authStrategy: new LocalAuth({
-      dataPath: './sessions',
+      dataPath: path.resolve(sessionDir),
       clientId,
     }),
     puppeteer: {
