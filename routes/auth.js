@@ -126,7 +126,7 @@ router.post('/signup', async (req, res) => {
     if (!email || !password || !phone) {
       return res.status(400).json({ error: 'name, email, password and phone are required' });
     }
-
+ 
     // choose WA sender: request clientId OR DEFAULT_WA_CLIENT_ID
     let otpSenderClientId = clientId || process.env.DEFAULT_WA_CLIENT_ID || null;
     if (!otpSenderClientId) {

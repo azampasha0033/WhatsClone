@@ -86,7 +86,7 @@ export function getClient(clientId) {
 
       if (readyFlags.get(clientId)) return; // prevents new QR spam after ready
   readyFlags.set(clientId, false);
-
+    
 
     if (!qrLogged) {
       console.log(`📸 QR received for ${clientId}`);
