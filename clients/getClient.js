@@ -5,7 +5,7 @@ import qrcode from 'qrcode';
 
 import { MessageQueue } from '../db/messageQueue.js';
 import { ClientModel } from '../db/clients.js';
-
+  
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
 import fs from 'fs';
@@ -306,7 +306,7 @@ export function getClient(clientId) {
         sent = await SentMessage.findOne({ type: 'poll', messageIdShort: parentShort });
       }
       if (!sent) {
-        console.log('⚠️ vote_update: parent poll not found for', parentIdRaw, 'short=', parentShort);
+       // console.log('⚠️ vote_update: parent poll not found for', parentIdRaw, 'short=', parentShort);
         return;
       }
 

@@ -52,9 +52,10 @@ export async function requireActivePlanForClient(req, res, next) {
     if (!sub) {
       console.log('No Active subscription found for clientId: 1111 ', client.clientId);
       return res.status(402).json({ ok: false, code: 402, error: 'No active subscription for this client' });
-    } else {
-      console.log('Active subscription found for clientId:', client.clientId);
-    }
+    } 
+    // else {
+    //   console.log('Active subscription found for clientId:', client.clientId);
+    // }
 
     const plan = await Plan.findOne({ code: sub.planCode });
     const limit = plan?.messageLimit ?? sub?.meta?.messageLimit ?? 0; // fallback to meta if needed

@@ -150,9 +150,10 @@ app.get('/messages/:clientId/:chatId', async (req, res) => {
               messageData.mediaUrl = base64Url;
               messageData.mediaInfo = { type: 'audio', mimetype: media.mimetype, filename: media.filename || 'Unnamed audio file' };
             }
-          } else {
-            console.log('Media could not be downloaded for message ID:', message.id._serialized);
-          }
+          } 
+          // else {
+          //   console.log('Media could not be downloaded for message ID:', message.id._serialized);
+          // }
         } catch (error) {
           console.error('Error processing media:', error);
         }
@@ -201,7 +202,7 @@ app.get('/status/:clientId', (req, res) => {
 // Base route
 app.get('/', (req, res) => res.send('👋 Hello from WhatsApp Web API!'));
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 const startServer = async () => {
   await connectDB();
