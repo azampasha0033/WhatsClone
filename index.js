@@ -50,8 +50,10 @@ global.io = io;
 app.use(cors());
 app.use(express.json());
 app.use('/labels', labelRoute);
-app.use("/uploads", express.static("uploads"));
-app.use("/upload", uploadRoute);
+app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
+
+// API routes
+app.use("/upload", uploadRouter);
 
 app.use('/api', subscribeRoutes);
 app.use('/subscriptions', subscriptionsStatusRoute);

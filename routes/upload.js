@@ -5,19 +5,23 @@ import fs from "fs";
 
 const router = express.Router();
 
-// Ensure uploads folder exists
-const uploadDir = path.join(process.cwd(), "uploads");
+// Read environment variables
+const uploadDir = process.env.BASE_DIR || path.join(process.cwd(), "uploads");
+const publicUrl = process.env.PUBLIC_URL || "http://localhost:3000";
+
+// Ensure upload folder exists
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log("✅ Created upload folder at", uploadDir);
 }
 
-// Configure multer
+// Configure Multer storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    const uniqueName = Date.now() + "-" + file.originalname;
+    const uniqueName = Date.now() + "-" + file.originalname.replace(/\s+/g, "_");
     cb(null, uniqueName);
   }
 });
@@ -30,8 +34,9 @@ router.post("/", upload.single("file"), (req, res) => {
     return res.status(400).json({ error: "No file uploaded" });
   }
 
-  // Build file URL
-  const fileUrl = `${process.env.BASE_URL || "http://localhost:3000"}/uploads/${req.file.filename}`;
+  // Build public URL
+  const fileUrl = `${publicUrl}/uploads/${req.file.filename}`;
+
   res.json({
     ok: true,
     fileUrl,
