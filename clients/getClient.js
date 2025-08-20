@@ -289,6 +289,42 @@ export function getClient(clientId) {
     }
   });
 
+
+  /* ------------------------------- New Message ------------------------------ */
+  client.on('message', async (msg) => {
+    try {
+      const messageData = {
+        id: msg.id._serialized,
+        from: msg.from,
+        to: msg.to,
+        timestamp: msg.timestamp,
+        body: msg.body,
+        type: msg.type,
+        hasMedia: msg.hasMedia
+      };
+
+      // 🔹 Emit new message in real-time
+      global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+
+      // 🔹 Also emit updated chat info (so frontend can move chat to top)
+      const chat = await msg.getChat();
+      const chatData = {
+        id: chat.id._serialized,
+        name: chat.name,
+        isGroup: chat.isGroup,
+        unreadCount: chat.unreadCount,
+        lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
+        timestamp: chat.timestamp
+      };
+      global.io?.to(clientId).emit('chat-updated', chatData);
+
+    } catch (err) {
+      console.error(`❌ Error in message handler for ${clientId}:`, err.message);
+    }
+  });
+
+  
+
   /* --------------------------- Poll vote (LOCK on first) --------------------------- */
   client.on('vote_update', async (vote) => {
     try {

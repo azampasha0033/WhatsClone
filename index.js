@@ -71,6 +71,15 @@ app.get('/chats/:clientId', async (req, res) => {
     // Fetch chats from the WhatsApp client (you may need to tweak this based on your WhatsApp client structure)
     const chats = await client.getChats();  // This fetches all chats using the `whatsapp-web.js` client
 
+     global.io?.to(clientId).emit('chats-list', chats.map(chat => ({
+      id: chat.id._serialized,
+      name: chat.name,
+      isGroup: chat.isGroup,
+      unreadCount: chat.unreadCount,
+      lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
+      timestamp: chat.timestamp
+    })));
+
     // If successful, return the chat data as JSON
     return res.json({
       clientId,
@@ -114,7 +123,7 @@ app.get('/messages/:clientId/:chatId', async (req, res) => {
     rawMessages.sort((a, b) => {
       const ta = a.timestamp || 0; // seconds since epoch
       const tb = b.timestamp || 0;
-      return order === 'desc' ? (ta - tb) : (tb - ta);
+      return order === 'desc' ? (tb - ta) : (ta - tb);
     });
 
     // Process each message and handle media types
@@ -210,19 +219,18 @@ const startServer = async () => {
 
   // Auto-init active sessions
   try {
-    const activeClients = await ClientModel.find({ sessionStatus: 'connected' }, 'clientId');
-    console.log(`🔁 Found ${activeClients.length} active client(s) to initialize...`);
+ const activeClients = await ClientModel.find({ sessionStatus: 'connected' }, 'clientId');
+await Promise.all(
+  activeClients.map(async ({ clientId }) => {
+    try {
+      await getClient(clientId);
+      console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
+    } catch (err) {
+      console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
+    }
+  })
+);
 
-    await Promise.all(
-      activeClients.map(async ({ clientId }) => {
-        try {
-          await getClient(clientId);
-          console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
-        } catch (err) {
-          console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
-        }
-      })
-    );
   } catch (err) {
     console.error('❌ Error fetching clients on startup:', err.message);
   }
