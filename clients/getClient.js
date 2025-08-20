@@ -5,7 +5,8 @@ import qrcode from 'qrcode';
 
 import { MessageQueue } from '../db/messageQueue.js';
 import { ClientModel } from '../db/clients.js';
-  
+  import mongoose from 'mongoose';
+
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
 import { MongoStore } from 'wwebjs-mongo';
