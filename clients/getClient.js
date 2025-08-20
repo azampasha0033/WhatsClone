@@ -37,51 +37,6 @@ async function initMongoStore() {
   }
 }
 
-/**
- * Get or create a WhatsApp client
- */
-export async function getClient(clientId) {
-  if (clients.has(clientId)) return clients.get(clientId);
-
-  await initMongoStore();
-
-  const client = new Client({
-    authStrategy: new LocalAuth({
-      clientId,
-      // Local dir is ephemeral on Railway, but still required by lib
-      dataPath: './wa-sessions',
-      store: mongoStore
-    }),
-    puppeteer: {
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }
-  });
-
-  // Events
-  client.on('qr', (qr) => {
-    console.log(`📲 QR for ${clientId} generated`);
-  });
-
-  client.on('ready', () => {
-    readyFlags.set(clientId, true);
-    console.log(`✅ Client ready: ${clientId}`);
-  });
-
-  client.on('disconnected', () => {
-    readyFlags.set(clientId, false);
-    console.log(`❌ Client disconnected: ${clientId}`);
-  });
-
-  await client.initialize();
-
-  clients.set(clientId, client);
-  return client;
-}
-
-export function isClientReady(clientId) {
-  return readyFlags.get(clientId) || false;
-}
 
 
 /* ------------------------------ Helper funcs ------------------------------ */
@@ -123,15 +78,17 @@ function extractOrderNumberFromCorrelation(corr) {
 }
 
 /* -------------------------------- getClient -------------------------------- */
-export function getClient(clientId) {
+export async  function getClient(clientId) {
   if (clients.has(clientId)) return clients.get(clientId);
 
   console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
+await initMongoStore();
 
   const client = new Client({
     authStrategy: new LocalAuth({
-      dataPath:sessionsPath,
       clientId,
+      dataPath: sessionsPath,   // still needed by lib
+      store: mongoStore         // 🔥 sessions persisted in Mongo now
     }),
     puppeteer: {
       headless: true,
