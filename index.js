@@ -52,6 +52,7 @@ app.use('/api', subscribeRoutes);
 app.use('/subscriptions', subscriptionsStatusRoute);
 app.use('/auth', authRoute);
 app.use(getApiKeyRoute);
+
 // API routes
 app.use('/qr', qrRoute);
 app.use('/send-message', requireActivePlanForClient, sendMessageRoute);
