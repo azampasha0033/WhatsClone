@@ -183,21 +183,22 @@ app.get('/', (req, res) => res.send('👋 Hello from WhatsApp Web API!'));
 io.on('connection', (socket) => {
   console.log('🔌 Socket.io client connected');
 
-  socket.on('join-client-room', async (clientId) => {
-    if (!clientId) return;
+socket.on('join-client-room', async (clientId) => {
+  if (!clientId) return;
+  console.log(`📡 join-client-room received: ${clientId}`);
+  socket.join(clientId);
+  socket.clientId = clientId;
 
-    console.log(`📡 join-client-room received: ${clientId}`);
-    socket.join(clientId);
-    socket.clientId = clientId;
+  const isReady = isClientReady(clientId);
+  socket.emit(isReady ? 'ready' : 'waiting', {
+    message: isReady ? '✅ Already connected to WhatsApp' : '⏳ Waiting for QR...'
+  });
 
-    const isReady = isClientReady(clientId);
-    socket.emit(isReady ? 'ready' : 'waiting', {
-      message: isReady ? '✅ Already connected to WhatsApp' : '⏳ Waiting for QR...'
-    });
+  const client = getClient(clientId);
 
-    // Send initial chats
-    const client = getClient(clientId);
-    if (client) {
+  // 🔹 Only send chats if client is already ready
+  if (isReady && client) {
+    try {
       const chats = await client.getChats();
       socket.emit('chats-list', chats.map(chat => ({
         id: chat.id._serialized,
@@ -207,8 +208,12 @@ io.on('connection', (socket) => {
         lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
         timestamp: chat.timestamp
       })));
+    } catch (err) {
+      console.error(`⚠️ Could not fetch chats for ${clientId}:`, err.message);
     }
-  });
+  }
+});
+
 
   // Frontend can request specific chat messages
   socket.on('load-messages', async ({ clientId, chatId }) => {
