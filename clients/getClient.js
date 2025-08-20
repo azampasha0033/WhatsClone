@@ -1,8 +1,8 @@
 // clients/getClient.js
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth, Poll, MessageMedia } = pkg;
+const { Client, LocalAuth,RemoteAuth, Poll, MessageMedia } = pkg;
 import qrcode from 'qrcode';
-import { RemoteAuth } from 'whatsapp-web.js';
+
 import { MessageQueue } from '../db/messageQueue.js';
 import { ClientModel } from '../db/clients.js';
 import mongoose from 'mongoose';
