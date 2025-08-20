@@ -1,4 +1,4 @@
-// index.js (final with real-time chats & messages)
+// index.js (fixed and complete with QR & status JSON + ngrok fallback check)
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -17,12 +17,15 @@ import registerClientRoute from './routes/registerClient.js';
 import sendPollMessageRoute from './routes/sendPollMessage.js';
 import authRoute from './routes/auth.js';
 import { jwtAuth } from './middleware/jwtAuth.js';
-import subscribeRoutes from './routes/subscribe.js';
+import subscribeRoutes  from './routes/subscribe.js';
 import subscriptionsStatusRoute from './routes/subscriptionsStatus.js';
 import { requireActivePlanForClient } from './middleware/requireActivePlanForClient.js';
 import getApiKeyRoute from './routes/getApiKey.js';
 
-// Debug logs for Mongo
+
+
+// import usersList from './routes/users-list.js';
+
 if (process.env.NODE_ENV === 'development') {
   mongoose.set('debug', true);
 }
@@ -43,131 +46,154 @@ global.io = io;
 
 app.use(cors());
 app.use(express.json());
-
-// ---- ROUTES ----
 app.use('/api', subscribeRoutes);
 app.use('/subscriptions', subscriptionsStatusRoute);
 app.use('/auth', authRoute);
 app.use(getApiKeyRoute);
+// API routes
 app.use('/qr', qrRoute);
 app.use('/send-message', requireActivePlanForClient, sendMessageRoute);
 app.use('/send-confirmation', sendConfirmationRoute);
 app.use('/register-client', registerClientRoute);
 app.use('/send-poll-message', sendPollMessageRoute);
+ 
 
-// ----------------------------
-// Chats REST (fallback, non-realtime)
-// ----------------------------
+
 app.get('/chats/:clientId', async (req, res) => {
   try {
-    const clientId = req.params.clientId;
-    const client = getClient(clientId);
+    const clientId = req.params.clientId;  // Extract clientId from the request parameters
+    const client = getClient(clientId);    // Get the WhatsApp client using the clientId
+
     if (!client) {
       return res.status(404).json({ error: `Client with ID ${clientId} not found.` });
     }
 
-    const chats = await client.getChats();
+    // Fetch chats from the WhatsApp client (you may need to tweak this based on your WhatsApp client structure)
+    const chats = await client.getChats();  // This fetches all chats using the `whatsapp-web.js` client
+
+    // If successful, return the chat data as JSON
     return res.json({
       clientId,
       chats: chats.map(chat => ({
-        id: chat.id._serialized,
-        name: chat.name,
-        isGroup: chat.isGroup,
-        unreadCount: chat.unreadCount,
-        lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
-        timestamp: chat.timestamp,
-      })),
+        id: chat.id._serialized,  // Unique identifier for the chat
+        name: chat.name,          // Name of the contact or group
+        isGroup: chat.isGroup,    // Boolean to indicate if it's a group chat
+        unreadCount: chat.unreadCount,  // Number of unread messages
+        lastMessage: chat.lastMessage ? chat.lastMessage.body : null,  // Last message in the chat
+        timestamp: chat.timestamp // Timestamp of the last message
+      }))
     });
+
   } catch (err) {
     console.error(`❌ Error fetching chats for client ${req.params.clientId}:`, err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-// ----------------------------
-// Messages REST (fallback, non-realtime)
-// ----------------------------
+
 app.get('/messages/:clientId/:chatId', async (req, res) => {
   try {
     const { clientId, chatId } = req.params;
-    const order = (req.query.order || 'desc').toLowerCase();
-    const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
+    const order = (req.query.order || 'desc').toLowerCase(); // 'asc' | 'desc'
+    const limit = Math.min(parseInt(req.query.limit || '100', 10), 500); // optional
 
+    // Get the WhatsApp client using the clientId
     const client = getClient(clientId);
     if (!client) {
       return res.status(404).json({ error: `Client with ID ${clientId} not found.` });
     }
 
+    // Fetch the chat by its ID
     const chat = await client.getChatById(chatId);
     if (!chat) {
       return res.status(404).json({ error: `Chat with ID ${chatId} not found.` });
     }
 
-    const rawMessages = await chat.fetchMessages({ limit });
+    // Fetch messages (optionally limit) and sort by timestamp
+    const rawMessages = await chat.fetchMessages({ limit }); // works even if limit isn't used by your lib
     rawMessages.sort((a, b) => {
-      const ta = a.timestamp || 0;
+      const ta = a.timestamp || 0; // seconds since epoch
       const tb = b.timestamp || 0;
-      return order === 'desc' ? (tb - ta) : (ta - tb);
+      return order === 'desc' ? (ta - tb) : (tb - ta);
     });
 
-    const processedMessages = await Promise.all(
-      rawMessages.map(async (message) => {
-        const messageData = {
-          id: message.id._serialized,
-          from: message.from,
-          to: message.to,
-          timestamp: message.timestamp,
-          body: message.body,
-          type: message.type,
-          isQuoted: message.hasQuotedMsg,
-          quotedMessage: message.quotedMsg ? message.quotedMsg.body : null,
-          mediaUrl: null,
-          mediaInfo: null,
-        };
+    // Process each message and handle media types
+    const processedMessages = await Promise.all(rawMessages.map(async (message) => {
+      const messageData = {
+        id: message.id._serialized,
+        from: message.from,
+        to: message.to,
+        timestamp: message.timestamp,                            // seconds
+        body: message.body,
+        type: message.type,
+        isQuoted: message.hasQuotedMsg,
+        quotedMessage: message.quotedMsg ? message.quotedMsg.body : null,
+        mediaUrl: null,
+        mediaInfo: null,
+      };
 
-        if (message.hasMedia) {
-          try {
-            const media = await message.downloadMedia();
-            if (media) {
-              const base64Url = `data:${media.mimetype};base64,${media.data}`;
-              if (media.mimetype.startsWith('image/')) {
-                messageData.mediaUrl = base64Url;
-                messageData.mediaInfo = { type: 'image', mimetype: media.mimetype, filename: media.filename || 'Unnamed' };
-              } else if (media.mimetype.startsWith('video/')) {
-                messageData.mediaUrl = base64Url;
-                messageData.mediaInfo = { type: 'video', mimetype: media.mimetype, filename: media.filename || 'Unnamed' };
-              } else if (media.mimetype.startsWith('application/')) {
-                messageData.mediaUrl = base64Url;
-                messageData.mediaInfo = { type: 'document', mimetype: media.mimetype, filename: media.filename || 'Unnamed' };
-              } else if (media.mimetype.startsWith('audio/')) {
-                messageData.mediaUrl = base64Url;
-                messageData.mediaInfo = { type: 'audio', mimetype: media.mimetype, filename: media.filename || 'Unnamed' };
-              }
+      if (message.hasMedia) {
+        try {
+          const media = await message.downloadMedia();
+          if (media) {
+            const base64Url = `data:${media.mimetype};base64,${media.data}`;
+
+            if (media.mimetype.startsWith('image/')) {
+              messageData.mediaUrl = base64Url;
+              messageData.mediaInfo = { type: 'image', mimetype: media.mimetype, filename: media.filename || 'Unnamed file' };
+            } else if (media.mimetype.startsWith('video/')) {
+              messageData.mediaUrl = base64Url;
+              messageData.mediaInfo = { type: 'video', mimetype: media.mimetype, filename: media.filename || 'Unnamed file' };
+            } else if (media.mimetype.startsWith('application/')) {
+              messageData.mediaUrl = base64Url;
+              messageData.mediaInfo = { type: 'document', mimetype: media.mimetype, filename: media.filename || 'Unnamed file' };
+            } else if (media.mimetype.startsWith('audio/')) {
+              messageData.mediaUrl = base64Url;
+              messageData.mediaInfo = { type: 'audio', mimetype: media.mimetype, filename: media.filename || 'Unnamed audio file' };
             }
-          } catch (error) {
-            console.error('Error processing media:', error);
-          }
+          } 
+          // else {
+          //   console.log('Media could not be downloaded for message ID:', message.id._serialized);
+          // }
+        } catch (error) {
+          console.error('Error processing media:', error);
         }
-        return messageData;
-      })
-    );
+      }
 
-    return res.json({ clientId, chatId, order, count: processedMessages.length, messages: processedMessages });
+      return messageData;
+    }));
+
+    return res.json({
+      clientId,
+      chatId,
+      order,
+      count: processedMessages.length,
+      messages: processedMessages
+    });
+
   } catch (err) {
     console.error(`❌ Error fetching messages for client ${req.params.clientId}, chat ${req.params.chatId}:`, err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-// ----------------------------
-// Status Route
-// ----------------------------
+
+
+
+
+// Status Endpoint with ngrok error protection
 app.get('/status/:clientId', (req, res) => {
   try {
     const clientId = req.params.clientId;
     const qr = getQRCode(clientId);
     const isReady = isClientReady(clientId);
-    res.json({ clientId, ready: isReady, qrAvailable: !!qr });
+
+    res.setHeader('Content-Type', 'application/json');
+    return res.json({
+      clientId,
+      ready: isReady,
+      qrAvailable: !!qr
+    });
   } catch (err) {
     console.error('❌ Error in /status route:', err);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -177,83 +203,8 @@ app.get('/status/:clientId', (req, res) => {
 // Base route
 app.get('/', (req, res) => res.send('👋 Hello from WhatsApp Web API!'));
 
-// ----------------------------
-// SOCKET.IO HANDLERS
-// ----------------------------
-io.on('connection', (socket) => {
-  console.log('🔌 Socket.io client connected');
-
-socket.on('join-client-room', async (clientId) => {
-  if (!clientId) return;
-  console.log(`📡 join-client-room received: ${clientId}`);
-  socket.join(clientId);
-  socket.clientId = clientId;
-
-  const isReady = isClientReady(clientId);
-  socket.emit(isReady ? 'ready' : 'waiting', {
-    message: isReady ? '✅ Already connected to WhatsApp' : '⏳ Waiting for QR...'
-  });
-
-  const client = getClient(clientId);
-
-  // 🔹 Only send chats if client is already ready
-  if (isReady && client) {
-    try {
-      const chats = await client.getChats();
-      socket.emit('chats-list', chats.map(chat => ({
-        id: chat.id._serialized,
-        name: chat.name,
-        isGroup: chat.isGroup,
-        unreadCount: chat.unreadCount,
-        lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
-        timestamp: chat.timestamp
-      })));
-    } catch (err) {
-      console.error(`⚠️ Could not fetch chats for ${clientId}:`, err.message);
-    }
-  }
-});
-
-
-  // Frontend can request specific chat messages
-  socket.on('load-messages', async ({ clientId, chatId }) => {
-    const client = getClient(clientId);
-    if (!client) return;
-
-    const chat = await client.getChatById(chatId);
-    if (!chat) return;
-
-    const msgs = await chat.fetchMessages({ limit: 50 });
-    socket.emit('messages-list', {
-      chatId,
-      messages: msgs.map(m => ({
-        id: m.id._serialized,
-        from: m.from,
-        to: m.to,
-        body: m.body,
-        type: m.type,
-        timestamp: m.timestamp,
-      })),
-    });
-  });
-
-  socket.on('disconnect', async () => {
-    const clientId = socket.clientId;
-    console.log(`❌ Socket disconnected for clientId: ${clientId || 'unknown'}`);
-    if (clientId && !isClientReady(clientId)) {
-      await ClientModel.updateOne(
-        { clientId },
-        { $set: { sessionStatus: 'disconnected' } }
-      );
-      console.log(`🔴 sessionStatus set to 'disconnected' for ${clientId}`);
-    }
-  });
-});
-
-// ----------------------------
-// START SERVER
-// ----------------------------
 const PORT = process.env.PORT || 8080;
+
 const startServer = async () => {
   await connectDB();
 
@@ -261,6 +212,7 @@ const startServer = async () => {
   try {
     const activeClients = await ClientModel.find({ sessionStatus: 'connected' }, 'clientId');
     console.log(`🔁 Found ${activeClients.length} active client(s) to initialize...`);
+
     await Promise.all(
       activeClients.map(async ({ clientId }) => {
         try {
@@ -274,6 +226,52 @@ const startServer = async () => {
   } catch (err) {
     console.error('❌ Error fetching clients on startup:', err.message);
   }
+
+io.on('connection', (socket) => {
+  console.log('🔌 Socket.io client connected');
+
+  socket.on('join-client-room', async (clientId) => {
+    if (!clientId) {
+      console.warn('⚠️ join-client-room received empty clientId. Ignoring.');
+      return;
+    }
+
+    console.log(`📡 join-client-room received: ${clientId}`);
+    socket.join(clientId);
+    socket.clientId = clientId;
+
+    // Emit the current connection status immediately
+    const isReady = isClientReady(clientId);
+    socket.emit(isReady ? 'ready' : 'waiting', {
+      message: isReady ? '✅ Already connected to WhatsApp' : '⏳ Waiting for QR...'
+    });
+  });
+
+  // Listen for sending a message
+  socket.on('send-message', (messageData) => {
+    // Broadcast the message to the client room
+    socket.to(messageData.clientId).emit('new-message', messageData);
+  });
+
+  // Disconnect handler
+  socket.on('disconnect', async () => {
+    const clientId = socket.clientId;
+    console.log(`❌ Socket disconnected for clientId: ${clientId || 'unknown'}`);
+
+    if (clientId && !isClientReady(clientId)) {
+      await ClientModel.updateOne(
+        { clientId },
+        { $set: { sessionStatus: 'disconnected' } }
+      );
+      console.log(`🔴 sessionStatus set to 'disconnected' for ${clientId}`);
+    } else {
+      console.log(`ℹ️ Ignoring socket disconnect; client is still ready.`);
+    }
+  });
+});
+
+
+
 
   server.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);

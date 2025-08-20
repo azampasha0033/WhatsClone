@@ -289,42 +289,6 @@ export function getClient(clientId) {
     }
   });
 
-
-  /* ------------------------------- New Message ------------------------------ */
-  client.on('message', async (msg) => {
-    try {
-      const messageData = {
-        id: msg.id._serialized,
-        from: msg.from,
-        to: msg.to,
-        timestamp: msg.timestamp,
-        body: msg.body,
-        type: msg.type,
-        hasMedia: msg.hasMedia,
-      };
-
-      // 🔹 Emit new message to all socket clients of this WhatsApp client
-      global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
-
-      // 🔹 Also update chats list (move active chat to top on frontend)
-      const chat = await msg.getChat();
-      const chatData = {
-        id: chat.id._serialized,
-        name: chat.name,
-        isGroup: chat.isGroup,
-        unreadCount: chat.unreadCount,
-        lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
-        timestamp: chat.timestamp,
-      };
-      global.io?.to(clientId).emit('chat-updated', chatData);
-
-    } catch (err) {
-      console.error(`❌ Error in message handler for ${clientId}:`, err.message);
-    }
-  });
-
-
-
   /* --------------------------- Poll vote (LOCK on first) --------------------------- */
   client.on('vote_update', async (vote) => {
     try {
