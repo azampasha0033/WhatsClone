@@ -32,11 +32,13 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "*", // allow all domains
     methods: ["GET", "POST"],
-    credentials: true,
-  },
+    credentials: true
+  }
 });
+
+
 global.io = io;
 
 app.use(cors());
