@@ -1,6 +1,12 @@
 // clients/getClient.js
+// import pkg from 'whatsapp-web.js';
+// const { Client, LocalAuth,RemoteAuth, Poll, MessageMedia } = pkg;
+
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth,RemoteAuth, Poll, MessageMedia } = pkg;
+const { Client, RemoteAuth, Poll, MessageMedia } = pkg;
+
+
+
 import qrcode from 'qrcode';
 
 import { MessageQueue } from '../db/messageQueue.js';
@@ -130,6 +136,7 @@ await initMongoStore();
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
     console.log(`✅ Client ready: ${clientId}`);
+
     qrCodes.set(clientId, null);
     readyFlags.set(clientId, true);
     global.io?.to(clientId).emit('ready', { message: 'connected' });
@@ -147,6 +154,50 @@ await initMongoStore();
     } catch (e) {
       console.warn('⚠️ ready: console pipe failed:', e?.message);
     }
+
+     try {
+    // 1. Fetch all chats
+    const chats = await client.getChats();
+
+    for (const chat of chats) {
+      await Chat.findOneAndUpdate(
+        { clientId, chatId: chat.id._serialized },
+        {
+          clientId,
+          chatId: chat.id._serialized,
+          name: chat.name || chat.formattedTitle,
+          isGroup: chat.isGroup
+        },
+        { upsert: true }
+      );
+
+      // 2. Fetch last 50 messages per chat (adjust count if needed)
+      const messages = await chat.fetchMessages({ limit: 50 });
+
+      for (const msg of messages) {
+        await Message.findOneAndUpdate(
+          { clientId, chatId: chat.id._serialized, messageId: msg.id._serialized },
+          {
+            clientId,
+            chatId: chat.id._serialized,
+            messageId: msg.id._serialized,
+            from: msg.from,
+            to: msg.to,
+            type: msg.type,
+            body: msg.body,
+            timestamp: msg.timestamp,
+            mediaUrl: msg.hasMedia ? '[downloadable]' : null
+          },
+          { upsert: true }
+        );
+      }
+    }
+
+    console.log(`💾 Synced chats/messages for client ${clientId}`);
+  } catch (err) {
+    console.error(`❌ Sync error for client ${clientId}:`, err);
+  }
+
 
     await ClientModel.updateOne(
       { clientId },
@@ -308,6 +359,23 @@ await initMongoStore();
 
   /* ------------------------------- New Message ------------------------------ */
   client.on('message', async (msg) => {
+    
+     try {
+       await Message.create({
+    clientId,
+    chatId: msg.from,
+    messageId: msg.id._serialized,
+    from: msg.from,
+    to: msg.to,
+    type: msg.type,
+    body: msg.body,
+    timestamp: msg.timestamp,
+    mediaUrl: msg.hasMedia ? '[downloadable]' : null
+  });
+    } catch (err) {
+      console.error(`❌ Error in message handler for ${clientId}:`, err.message);
+    }
+
     try {
       const messageData = {
         id: msg.id._serialized,
