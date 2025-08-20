@@ -2,14 +2,17 @@
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth, Poll, MessageMedia } = pkg;
 import qrcode from 'qrcode';
-
+import { RemoteAuth } from 'whatsapp-web.js';
 import { MessageQueue } from '../db/messageQueue.js';
 import { ClientModel } from '../db/clients.js';
-  import mongoose from 'mongoose';
-
+import mongoose from 'mongoose';
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
 import { MongoStore } from 'wwebjs-mongo';
+
+
+import { Chat } from '../models/Chat.js';
+import { Message } from '../models/Message.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -20,6 +23,7 @@ import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
+const store = new MongoStore({ mongoose });
 let mongoStore;
 // const sessionsPath = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
 
@@ -86,25 +90,16 @@ export async  function getClient(clientId) {
 await initMongoStore();
 
   const client = new Client({
-    authStrategy: new LocalAuth({
-      clientId,
-      dataPath: sessionsPath,   // still needed by lib
-      store: mongoStore         // 🔥 sessions persisted in Mongo now
-    }),
-    puppeteer: {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-extensions',
-        '--disable-gpu',
-        '--no-zygote',
-        '--single-process',
-        '--js-flags=--expose-gc',
-      ],
-    },
-  });
+  authStrategy: new RemoteAuth({
+    clientId,
+    store,             // session store in Mongo
+    backupSyncIntervalMs: 300000 // optional: 5 min
+  }),
+  puppeteer: {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  }
+});
 
   /* --------------------------------- QR Code -------------------------------- */
   let qrLogged = false;
