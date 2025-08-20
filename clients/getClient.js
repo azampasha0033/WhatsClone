@@ -300,7 +300,8 @@ export function getClient(clientId) {
         timestamp: msg.timestamp,
         body: msg.body,
         type: msg.type,
-        hasMedia: msg.hasMedia
+        hasMedia: msg.hasMedia,
+         ack: msg.ack   // ✅ add this
       };
 
       // 🔹 Emit new message in real-time
@@ -323,7 +324,7 @@ export function getClient(clientId) {
     }
   });
 
-  
+
 
   /* --------------------------- Poll vote (LOCK on first) --------------------------- */
   client.on('vote_update', async (vote) => {
