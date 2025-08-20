@@ -8,6 +8,8 @@ import { ClientModel } from '../db/clients.js';
   
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
+import { MongoStore } from 'wwebjs-mongo';
+
 import fs from 'fs';
 import path from 'path';
 
@@ -17,9 +19,70 @@ import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
+let mongoStore;
 // const sessionsPath = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
 
+
 const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
+
+// Connect Mongo and initialize store
+async function initMongoStore() {
+  if (!mongoStore) {
+    await mongoose.connect(process.env.MONGO_URL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    mongoStore = new MongoStore({ mongoose });
+    console.log('✅ MongoStore connected for WhatsApp sessions');
+  }
+}
+
+/**
+ * Get or create a WhatsApp client
+ */
+export async function getClient(clientId) {
+  if (clients.has(clientId)) return clients.get(clientId);
+
+  await initMongoStore();
+
+  const client = new Client({
+    authStrategy: new LocalAuth({
+      clientId,
+      // Local dir is ephemeral on Railway, but still required by lib
+      dataPath: './wa-sessions',
+      store: mongoStore
+    }),
+    puppeteer: {
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }
+  });
+
+  // Events
+  client.on('qr', (qr) => {
+    console.log(`📲 QR for ${clientId} generated`);
+  });
+
+  client.on('ready', () => {
+    readyFlags.set(clientId, true);
+    console.log(`✅ Client ready: ${clientId}`);
+  });
+
+  client.on('disconnected', () => {
+    readyFlags.set(clientId, false);
+    console.log(`❌ Client disconnected: ${clientId}`);
+  });
+
+  await client.initialize();
+
+  clients.set(clientId, client);
+  return client;
+}
+
+export function isClientReady(clientId) {
+  return readyFlags.get(clientId) || false;
+}
+
 
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {

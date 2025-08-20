@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import { connectDB } from './db/mongo.js';
 import { ClientModel } from './db/clients.js';
 import { getClient, getQRCode, isClientReady } from './clients/getClient.js';
+import fs from 'fs';
 
 // Route imports
 import qrRoute from './routes/qrCode.js';
@@ -29,6 +30,7 @@ import getApiKeyRoute from './routes/getApiKey.js';
 if (process.env.NODE_ENV === 'development') {
   mongoose.set('debug', true);
 }
+
 
 const app = express();
 const server = http.createServer(app);
@@ -57,6 +59,14 @@ app.use('/send-confirmation', sendConfirmationRoute);
 app.use('/register-client', registerClientRoute);
 app.use('/send-poll-message', sendPollMessageRoute);
  
+
+const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
+
+if (!fs.existsSync(sessionsPath)) {
+  console.log('⚠️ Session folder missing → Railway wiped storage');
+} else {
+  console.log('✅ Session folder exists →', sessionsPath);
+}
 
 
 app.get('/chats/:clientId', async (req, res) => {
