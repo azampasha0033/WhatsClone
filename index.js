@@ -23,7 +23,7 @@ import subscribeRoutes  from './routes/subscribe.js';
 import subscriptionsStatusRoute from './routes/subscriptionsStatus.js';
 import { requireActivePlanForClient } from './middleware/requireActivePlanForClient.js';
 import getApiKeyRoute from './routes/getApiKey.js';
-import uploadRoute from "./routes/upload.js";
+import uploadRouter from "./routes/upload.js";
 
 
 // import usersList from './routes/users-list.js';
