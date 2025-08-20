@@ -89,7 +89,7 @@ function extractOrderNumberFromCorrelation(corr) {
 }
 
 /* -------------------------------- getClient -------------------------------- */
-export async  function getClient(clientId) {
+export  function getClient(clientId) {
   if (clients.has(clientId)) return clients.get(clientId);
 
   console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
