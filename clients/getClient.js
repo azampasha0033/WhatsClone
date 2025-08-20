@@ -1,24 +1,13 @@
 // clients/getClient.js
-// import pkg from 'whatsapp-web.js';
-// const { Client, LocalAuth,RemoteAuth, Poll, MessageMedia } = pkg;
-
 import pkg from 'whatsapp-web.js';
-const { Client, RemoteAuth, Poll, MessageMedia } = pkg;
-
-
-
+const { Client, LocalAuth, Poll, MessageMedia } = pkg;
 import qrcode from 'qrcode';
 
 import { MessageQueue } from '../db/messageQueue.js';
 import { ClientModel } from '../db/clients.js';
-import mongoose from 'mongoose';
+  
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
-import { MongoStore } from 'wwebjs-mongo';
-
-
-import { Chat } from '../models/Chat.js';
-import { Message } from '../models/Message.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -29,26 +18,9 @@ import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
-const store = new MongoStore({ mongoose });
-let mongoStore;
 // const sessionsPath = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
 
-
 const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
-
-// Connect Mongo and initialize store
-async function initMongoStore() {
-  if (!mongoStore) {
-    await mongoose.connect(process.env.MONGO_URL, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
-    mongoStore = new MongoStore({ mongoose });
-    console.log('✅ MongoStore connected for WhatsApp sessions');
-  }
-}
-
-
 
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
@@ -89,23 +61,30 @@ function extractOrderNumberFromCorrelation(corr) {
 }
 
 /* -------------------------------- getClient -------------------------------- */
-export  function getClient(clientId) {
+export function getClient(clientId) {
   if (clients.has(clientId)) return clients.get(clientId);
 
   console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
-await initMongoStore();
 
   const client = new Client({
-  authStrategy: new RemoteAuth({
-    clientId,
-    store,             // session store in Mongo
-    backupSyncIntervalMs: 300000 // optional: 5 min
-  }),
-  puppeteer: {
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  }
-});
+    authStrategy: new LocalAuth({
+      dataPath:sessionsPath,
+      clientId,
+    }),
+    puppeteer: {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-extensions',
+        '--disable-gpu',
+        '--no-zygote',
+        '--single-process',
+        '--js-flags=--expose-gc',
+      ],
+    },
+  });
 
   /* --------------------------------- QR Code -------------------------------- */
   let qrLogged = false;
@@ -134,254 +113,186 @@ await initMongoStore();
   });
 
   /* ---------------------------------- Ready --------------------------------- */
-client.on('ready', async () => {
-  console.log(`✅ Client ready: ${clientId}`);
+  client.on('ready', async () => {
+    console.log(`✅ Client ready: ${clientId}`);
+    qrCodes.set(clientId, null);
+    readyFlags.set(clientId, true);
+    global.io?.to(clientId).emit('ready', { message: 'connected' });
 
-  // reset QR + set ready
-  qrCodes.set(clientId, null);
-  readyFlags.set(clientId, true);
-  global.io?.to(clientId).emit('ready', { message: 'connected' });
-
-  // attach page console logs
-  try {
-    const page = client.pupPage;
-    if (page && !page.__consoleHooked) {
-      page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
-      page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
-      page.on('pageerror', (e) => console.warn('📄[WA] PAGEEXCEPTION', e?.message || e));
-      page.__consoleHooked = true;
-      console.log('🔌 ready: page console piping enabled');
-    }
-  } catch (e) {
-    console.warn('⚠️ ready: console pipe failed:', e?.message);
-  }
-
-  /* ---------------------------------------------------------------------- */
-  /* 🔥 STEP 1: SYNC CHATS & MESSAGES TO DB                                 */
-  /* ---------------------------------------------------------------------- */
-  try {
-    const chats = await client.getChats();
-    console.log(`💬 Found ${chats.length} chats for ${clientId}`);
-
-    for (const chat of chats) {
-      await Chat.findOneAndUpdate(
-        { clientId, chatId: chat.id._serialized },
-        {
-          clientId,
-          chatId: chat.id._serialized,
-          name: chat.name || chat.formattedTitle,
-          isGroup: chat.isGroup
-        },
-        { upsert: true }
-      );
-
-      // fetch last 50 messages per chat
-      const messages = await chat.fetchMessages({ limit: 50 });
-
-      for (const msg of messages) {
-        await Message.findOneAndUpdate(
-          { clientId, chatId: chat.id._serialized, messageId: msg.id._serialized },
-          {
-            clientId,
-            chatId: chat.id._serialized,
-            messageId: msg.id._serialized,
-            from: msg.from,
-            to: msg.to,
-            type: msg.type,
-            body: msg.body,
-            timestamp: msg.timestamp,
-            status: msg.ack, // 👈 ack = 0(sent)/1(delivered)/2(read)/3(played)
-            mediaUrl: msg.hasMedia ? '[downloadable]' : null
-          },
-          { upsert: true }
-        );
-      }
-    }
-
-    console.log(`💾 Synced chats/messages for client ${clientId}`);
-  } catch (err) {
-    console.error(`❌ Sync error for client ${clientId}:`, err);
-  }
-
-  /* ---------------------------------------------------------------------- */
-  /* 🔥 STEP 2: UPDATE CLIENT STATUS IN DB                                  */
-  /* ---------------------------------------------------------------------- */
-  await ClientModel.updateOne(
-    { clientId },
-    {
-      $set: {
-        sessionStatus: 'connected',
-        lastConnectedAt: new Date()
-      }
-    }
-  ).catch((e) => console.warn('⚠️ ClientModel connected warn:', e?.message));
-  console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
-
-  /* ---------------------------------------------------------------------- */
-  /* 🔥 STEP 3: PROCESS QUEUED MESSAGES                                     */
-  /* ---------------------------------------------------------------------- */
-  const queued = await MessageQueue.find({ clientId, status: 'pending' }).catch(() => []);
-  console.log(`📮 queued count for ${clientId}: ${queued.length}`);
-
-  for (const { to, message, _id, type } of queued) {
+    // ensure page console piping after ready (best-effort)
     try {
-      const chatId = to.replace(/\D/g, '') + '@c.us';
-      let payload = null;
-      try { payload = JSON.parse(message); } catch {}
+      const page = client.pupPage;
+      if (page && !page.__consoleHooked) {
+        page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
+        page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
+        page.on('pageerror', (e) => console.warn('📄[WA] PAGEEXCEPTION', e?.message || e));
+        page.__consoleHooked = true;
+        console.log('🔌 ready: page console piping enabled');
+      }
+    } catch (e) {
+      console.warn('⚠️ ready: console pipe failed:', e?.message);
+    }
 
-      // check quota
-      const isPoll = type === 'poll';
-      const willSendIntro = isPoll && payload?.introText && String(payload.introText).trim().length > 0;
-      const requiredSends = isPoll ? (willSendIntro ? 2 : 1) : 1;
+    await ClientModel.updateOne(
+      { clientId },
+      {
+        $set: {
+          sessionStatus: 'connected',
+          lastConnectedAt: new Date()
+        }
+      }
+    ).catch((e) => console.warn('⚠️ ClientModel connected warn:', e?.message));
+    console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
 
-      let subInfo;
+    // === Process Queued Messages ===
+    const queued = await MessageQueue.find({ clientId, status: 'pending' }).catch(() => []);
+    console.log(`📮 queued count for ${clientId}: ${queued.length}`);
+
+    for (const { to, message, _id, type } of queued) {
       try {
-        subInfo = await assertCanSendMessage(clientId);
-        if (subInfo.remaining < requiredSends) {
-          const msg = `Plan limit reached: need ${requiredSends}, have ${subInfo.remaining}.`;
+        const chatId = to.replace(/\D/g, '') + '@c.us';
+        let payload = null;
+        try { payload = JSON.parse(message); } catch {}
+
+        // ⬇️ Determine how many sends this queued item requires
+        const isPoll = type === 'poll';
+        const willSendIntro = isPoll && payload?.introText && String(payload.introText).trim().length > 0;
+        const requiredSends = isPoll ? (willSendIntro ? 2 : 1) : 1;
+
+        // ⬇️ Check quota before sending this queued item
+        let subInfo;
+        try {
+          subInfo = await assertCanSendMessage(clientId);
+          if (subInfo.remaining < requiredSends) {
+            const msg = `Plan limit reached: need ${requiredSends}, have ${subInfo.remaining}.`;
+            console.warn(`⛔ quota: ${msg}`);
+            await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: msg } });
+            continue; // move to next queued item
+          }
+        } catch (qe) {
+          const msg = `No active subscription: ${qe.message}`;
           console.warn(`⛔ quota: ${msg}`);
           await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: msg } });
           continue;
         }
-      } catch (qe) {
-        const msg = `No active subscription: ${qe.message}`;
-        console.warn(`⛔ quota: ${msg}`);
-        await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: msg } });
-        continue;
-      }
 
-      let sent;
-      let consumed = 0;
+        let sent;
+        let consumed = 0;
 
-      /* -------------------- Poll -------------------- */
-      if (isPoll) {
-        // optional intro
-        if (willSendIntro) {
-          const introMsg = await client.sendMessage(chatId, String(payload.introText));
+        if (isPoll) {
+          // 1) optional intro text BEFORE poll (consumes 1)
+          if (willSendIntro) {
+            const introMsg = await client.sendMessage(chatId, String(payload.introText));
+            await SentMessage.create({
+              clientId,
+              to: chatId,
+              type: 'message',
+              messageId: introMsg?.id?._serialized || null,
+              messageIdShort: getShortMsgId(introMsg?.id?._serialized || null),
+              payload: { message: String(payload.introText), correlationId: payload?.correlationId || null },
+              correlationId: payload?.correlationId || null
+            }).catch(() => {});
+            if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+            consumed += 1;
+          }
+
+          // 2) send the poll (consumes 1)
+          const qRaw = (payload?.question || '').trim();
+          const ops = Array.isArray(payload?.options) ? payload.options.map(o => String(o).trim()) : [];
+          if (!qRaw || ops.length === 0) {
+            const msg = `Invalid poll payload for ${to}`;
+            console.error(`❌ ${msg}`, payload);
+            await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: msg } });
+            continue;
+          }
+
+          const corr = payload?.correlationId || null; // e.g. "confirm:10000013"
+          const qWithId = corr ? `${qRaw} (ID:${corr})` : qRaw;
+
+          const poll = new Poll(qWithId, ops, {
+            allowMultipleAnswers: payload?.allowMultipleAnswers === true ? true : false,
+            allowResubmission: false
+          });
+
+          sent = await client.sendMessage(chatId, poll);
+          const mid = sent?.id?._serialized || null;
+          console.log('✉️ poll sent →', mid);
+
+          await SentMessage.create({
+            clientId,
+            to: chatId,
+            type: 'poll',
+            messageId: mid,
+            messageIdShort: getShortMsgId(mid),       // store short id too
+            payload: {
+              question: qWithId,
+              options: ops,
+              allowMultipleAnswers: payload?.allowMultipleAnswers === true ? true : false,
+              correlationId: corr
+            },
+            correlationId: corr,
+            answered: false
+          }).catch(() => {});
+          if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+          consumed += 1;
+
+        } else if (payload?.attachment) {
+          // media (consumes 1)
+          let media;
+          if (String(payload.attachment).startsWith('http')) {
+            media = await MessageMedia.fromUrl(payload.attachment);
+          } else {
+            media = new MessageMedia(
+              payload.mimetype || 'application/octet-stream',
+              String(payload.attachment).includes(',') ? String(payload.attachment).split(',')[1] : payload.attachment,
+              payload.filename || 'file'
+            );
+          }
+          sent = await client.sendMessage(chatId, media, { caption: payload.message || '' });
+
+          await SentMessage.create({
+            clientId,
+            to: chatId,
+            type: 'media',
+            messageId: sent?.id?._serialized || null,
+            messageIdShort: getShortMsgId(sent?.id?._serialized || null),
+            payload,
+            correlationId: payload?.correlationId || null
+          }).catch(() => {});
+          if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+          consumed += 1;
+
+        } else {
+          // text (consumes 1)
+          const text = payload?.message ?? message;
+          sent = await client.sendMessage(chatId, text);
+
           await SentMessage.create({
             clientId,
             to: chatId,
             type: 'message',
-            messageId: introMsg?.id?._serialized || null,
-            messageIdShort: getShortMsgId(introMsg?.id?._serialized || null),
-            payload: { message: String(payload.introText), correlationId: payload?.correlationId || null },
+            messageId: sent?.id?._serialized || null,
+            messageIdShort: getShortMsgId(sent?.id?._serialized || null),
+            payload,
             correlationId: payload?.correlationId || null
           }).catch(() => {});
           if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
           consumed += 1;
         }
 
-        // send the poll
-        const qRaw = (payload?.question || '').trim();
-        const ops = Array.isArray(payload?.options) ? payload.options.map(o => String(o).trim()) : [];
-        if (!qRaw || ops.length === 0) {
-          const msg = `Invalid poll payload for ${to}`;
-          console.error(`❌ ${msg}`, payload);
-          await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: msg } });
-          continue;
-        }
-
-        const corr = payload?.correlationId || null;
-        const qWithId = corr ? `${qRaw} (ID:${corr})` : qRaw;
-
-        const poll = new Poll(qWithId, ops, {
-          allowMultipleAnswers: payload?.allowMultipleAnswers === true ? true : false,
-          allowResubmission: false
-        });
-
-        sent = await client.sendMessage(chatId, poll);
-        const mid = sent?.id?._serialized || null;
-        console.log('✉️ poll sent →', mid);
-
-        await SentMessage.create({
-          clientId,
-          to: chatId,
-          type: 'poll',
-          messageId: mid,
-          messageIdShort: getShortMsgId(mid),
-          payload: { question: qWithId, options: ops, allowMultipleAnswers: payload?.allowMultipleAnswers || false, correlationId: corr },
-          correlationId: corr,
-          answered: false
-        }).catch(() => {});
-        if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
-        consumed += 1;
-
-      /* -------------------- Media -------------------- */
-      } else if (payload?.attachment) {
-        let media;
-        if (String(payload.attachment).startsWith('http')) {
-          media = await MessageMedia.fromUrl(payload.attachment);
-        } else {
-          media = new MessageMedia(
-            payload.mimetype || 'application/octet-stream',
-            String(payload.attachment).includes(',') ? String(payload.attachment).split(',')[1] : payload.attachment,
-            payload.filename || 'file'
-          );
-        }
-        sent = await client.sendMessage(chatId, media, { caption: payload.message || '' });
-
-        await SentMessage.create({
-          clientId,
-          to: chatId,
-          type: 'media',
-          messageId: sent?.id?._serialized || null,
-          messageIdShort: getShortMsgId(sent?.id?._serialized || null),
-          payload,
-          correlationId: payload?.correlationId || null
-        }).catch(() => {});
-        if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
-        consumed += 1;
-
-      /* -------------------- Text -------------------- */
-      } else {
-        const text = payload?.message ?? message;
-        sent = await client.sendMessage(chatId, text);
-
-        await SentMessage.create({
-          clientId,
-          to: chatId,
-          type: 'message',
-          messageId: sent?.id?._serialized || null,
-          messageIdShort: getShortMsgId(sent?.id?._serialized || null),
-          payload,
-          correlationId: payload?.correlationId || null
-        }).catch(() => {});
-        if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
-        consumed += 1;
+        await MessageQueue.updateOne({ _id }, { $set: { status: 'sent', sentAt: new Date(), consumed } }).catch(() => {});
+        await ClientModel.updateOne({ clientId }, { $inc: { messagesCount: consumed } }).catch(() => {});
+        console.log(`✅ queued item sent type=${type} to=${to} (consumed ${consumed})`);
+      } catch (err) {
+        console.error(`⛔ queued send failed to ${to}:`, err.message);
+        await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: err.message } }).catch(() => {});
       }
-
-      await MessageQueue.updateOne({ _id }, { $set: { status: 'sent', sentAt: new Date(), consumed } }).catch(() => {});
-      await ClientModel.updateOne({ clientId }, { $inc: { messagesCount: consumed } }).catch(() => {});
-      console.log(`✅ queued item sent type=${type} to=${to} (consumed ${consumed})`);
-
-    } catch (err) {
-      console.error(`⛔ queued send failed to ${to}:`, err.message);
-      await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: err.message } }).catch(() => {});
     }
-  }
-});
-
+  });
 
 
   /* ------------------------------- New Message ------------------------------ */
   client.on('message', async (msg) => {
-    
-     try {
-       await Message.create({
-    clientId,
-    chatId: msg.from,
-    messageId: msg.id._serialized,
-    from: msg.from,
-    to: msg.to,
-    type: msg.type,
-    body: msg.body,
-    timestamp: msg.timestamp,
-    mediaUrl: msg.hasMedia ? '[downloadable]' : null
-  });
-    } catch (err) {
-      console.error(`❌ Error in message handler for ${clientId}:`, err.message);
-    }
-
     try {
       const messageData = {
         id: msg.id._serialized,
