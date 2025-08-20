@@ -15,13 +15,14 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.17.0",
-    "wwebjs-mongo": "^1.1.0",
+    "multer": "^2.0.2",
     "node-cache": "^5.1.2",
     "nodemon": "^3.1.10",
     "puppeteer": "^24.16.1",
     "puppeteer-core": "^23.7.0",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1",
-    "whatsapp-web.js": "github:alechkos/whatsapp-web.js#fix-poll-vote-event"
+    "whatsapp-web.js": "github:alechkos/whatsapp-web.js#fix-poll-vote-event",
+    "wwebjs-mongo": "^1.1.0"
   }
 }

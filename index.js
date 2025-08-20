@@ -23,6 +23,7 @@ import subscribeRoutes  from './routes/subscribe.js';
 import subscriptionsStatusRoute from './routes/subscriptionsStatus.js';
 import { requireActivePlanForClient } from './middleware/requireActivePlanForClient.js';
 import getApiKeyRoute from './routes/getApiKey.js';
+import uploadRoute from "./routes/upload.js";
 
 
 // import usersList from './routes/users-list.js';
@@ -49,6 +50,9 @@ global.io = io;
 app.use(cors());
 app.use(express.json());
 app.use('/labels', labelRoute);
+app.use("/uploads", express.static("uploads"));
+app.use("/upload", uploadRoute);
+
 app.use('/api', subscribeRoutes);
 app.use('/subscriptions', subscriptionsStatusRoute);
 app.use('/auth', authRoute);
