@@ -8,7 +8,7 @@ import { ClientModel } from '../db/clients.js';
   
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
-export { getClient, getQRCode, sessionStatus };
+export { getClient, sessionStatus };
 
 import fs from 'fs';
 import path from 'path';
