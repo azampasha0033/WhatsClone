@@ -1,3 +1,4 @@
+// routes/labels.js
 import express from 'express';
 import { Label } from '../models/Label.js';
 
@@ -20,6 +21,7 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 /**
  * Get Labels for a Client
