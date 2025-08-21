@@ -73,12 +73,13 @@ function getClient(clientId) {
     puppeteer: {
       headless: true,
       args: [
-        '--no-sandbox',
+       '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--single-process'
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu'
       ],
     },
   });
@@ -250,8 +251,19 @@ client.on('authenticated', () => {
           sent = await client.sendMessage(chatId, media, { caption: payload.message || '' });
 
         } else {
-          const text = payload?.message ?? message;
-          sent = await client.sendMessage(chatId, text);
+         let text;
+
+  if (payload?.message) {
+    // Use provided message
+    text = payload.message;
+  } else {
+    // No message → auto-generate OTP and save in DB
+    const { generateOtp } = await import('../services/otpService.js');
+    const otp = await generateOtp(chatId.replace('@c.us', ''), clientId);
+    text = `🔑 Your OTP is: ${otp}`;
+  }
+
+  sent = await client.sendMessage(chatId, text);
         }
 
         console.log(`✅ queued item sent type=${type} to=${to}`);
