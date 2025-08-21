@@ -112,7 +112,7 @@ app.get('/chats/:clientId', async (req, res) => {
     if (mongoose.Types.ObjectId.isValid(clientId)) {
       const record = await ClientModel.findById(clientId);
       if (record && record.clientId) {
-        console.log(`Resolved clientId: ${record.clientId} using field: _id`);
+        //console.log(`Resolved clientId: ${record.clientId} using field: _id`);
         clientId = record.clientId;
       }
     }
@@ -263,7 +263,7 @@ const startServer = async () => {
       activeClients.map(async ({ clientId }) => {
         try {
           await getClient(clientId);
-          console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
+          //console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
         } catch (err) {
           console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
         }
@@ -273,16 +273,16 @@ const startServer = async () => {
     console.error('❌ Error fetching clients on startup:', err.message);
   }
 
- io.on('connection', (socket) => {
-  console.log('🔌 Socket.io client connected');
+io.on('connection', (socket) => {
+//  console.log('🔌 Socket.io client connected');
 
   socket.on('join-client-room', (clientId) => {
     if (!clientId) return;
-    console.log('📡 join-client-room received:', clientId);
+    //console.log('📡 join-client-room received:', clientId);
 
     // prevent duplicate joins
     if (socket.rooms.has(clientId)) {
-      console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
+      //console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
       return;
     }
 
@@ -294,13 +294,13 @@ const startServer = async () => {
   });
 
   socket.on('disconnect', () => {
-    console.log(`❌ Socket disconnected (id=${socket.id})`);
-
+    //console.log(`❌ Socket disconnected (id=${socket.id})`);
   });
 });
 
+
   server.listen(PORT, () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
+    //console.log(`🚀 Server running at http://localhost:${PORT}`);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`❌ Port ${PORT} is already in use.`);

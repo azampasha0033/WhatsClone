@@ -46,7 +46,7 @@ async function run() {
     await Plan.updateOne({ code: d.code }, { $set: d }, { upsert: true });
   }
 
-  console.log('✅ Plans seeded/updated');
+  //console.log('✅ Plans seeded/updated');
   process.exit(0);
 }
 

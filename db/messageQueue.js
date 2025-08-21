@@ -14,7 +14,7 @@ export const MessageQueue = mongoose.model('MessageQueue', messageQueueSchema);
 // Function to queue a message
 export const queueMessage = async (clientId, to, message, type) => {
   await MessageQueue.create({ clientId, to, message, type });  // Save the type when queuing the message
-  console.log(`⏳ Queued message in DB for ${clientId} → ${to} with type ${type}`);
+//  console.log(`⏳ Queued message in DB for ${clientId} → ${to} with type ${type}`);
 };
 
 // Get all queued messages for a client

@@ -12,7 +12,7 @@ const publicUrl = process.env.PUBLIC_URL || "http://localhost:3000";
 // Ensure upload folder exists
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
-  console.log("✅ Created upload folder at", uploadDir);
+  //console.log("✅ Created upload folder at", uploadDir);
 }
 
 // Configure Multer storage

@@ -19,9 +19,9 @@ router.post('/', async (req, res) => {
   const cleanClientId = String(clientId).trim();
   const cleanApiKey = String(apiKey).trim();
 
-  console.log('📥 Incoming Request');
-  console.log('Client ID:', cleanClientId);
-  console.log('API Key:', cleanApiKey);
+  //console.log('📥 Incoming Request');
+  //console.log('Client ID:', cleanClientId);
+  //console.log('API Key:', cleanApiKey);
 
   try {
     const clientRecord = await ClientModel.findOne({
@@ -52,7 +52,7 @@ router.post('/', async (req, res) => {
         status: 'pending',
       });
 
-      console.log(`📨 Queued poll message for client ${cleanClientId} → ${to}`);
+     // console.log(`📨 Queued poll message for client ${cleanClientId} → ${to}`);
       return res.status(202).json({
         success: true,
         queued: true,

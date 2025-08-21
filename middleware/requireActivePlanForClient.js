@@ -50,7 +50,7 @@ export async function requireActivePlanForClient(req, res, next) {
     }).sort({ endAt: -1 });
 
     if (!sub) {
-      console.log('No Active subscription found for clientId: 1111 ', client.clientId);
+      //console.log('No Active subscription found for clientId: 1111 ', client.clientId);
       return res.status(402).json({ ok: false, code: 402, error: 'No active subscription for this client' });
     } 
     // else {
