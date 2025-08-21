@@ -1,4 +1,3 @@
-// routes/labels.js
 import express from 'express';
 import { Label } from '../models/Label.js';
 
@@ -17,18 +16,6 @@ router.post('/', async (req, res) => {
     const label = new Label({ clientId, name, color });
     await label.save();
     res.status(201).json(label);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * Get All Labels (global)
- */
-router.get('/', async (req, res) => {
-  try {
-    const labels = await Label.find();
-    res.json(labels);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

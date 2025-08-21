@@ -7,6 +7,8 @@ import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import { connectDB } from './db/mongo.js';
 import { ClientModel } from './db/clients.js';
+import { Chat } from './models/Chat.js';
+import { Message } from './models/Message.js';
 
 import fs from 'fs';
 
@@ -104,128 +106,55 @@ async function safeGetClient(clientId) {
 /* -------------------------------------------------------------------------- */
 
 // ✅ Chats
+// index.js
+import { Chat } from './models/Chat.js';
+
 app.get('/chats/:clientId', async (req, res) => {
   try {
     let { clientId } = req.params;
 
-    // 🔑 If we receive a Mongo ObjectId, resolve it to real clientId
+    // Support Mongo ObjectId → resolve to clientId
     if (mongoose.Types.ObjectId.isValid(clientId)) {
       const record = await ClientModel.findById(clientId);
       if (record && record.clientId) {
-        console.log(`Resolved clientId: ${record.clientId} using field: _id`);
         clientId = record.clientId;
       }
     }
 
-    const client = await safeGetClient(clientId);
-    if (!client) {
-      return res.status(503).json({ error: `Client ${clientId} restarting or not ready. Try again shortly.` });
-    }
+    // ✅ Load from DB (no WhatsApp delay)
+    const chats = await Chat.find({ clientId })
+      .sort({ updatedAt: -1 })
+      .lean();
 
-    let chats;
-    try {
-      chats = await client.getChats();
-    } catch (err) {
-      console.error(`⚠️ getChats failed for ${clientId}:`, err.message);
-      try { await client.destroy(); } catch {}
-      return res.status(500).json({ error: `Client ${clientId} needs restart` });
-    }
-
-    const formatted = chats.map(chat => ({
-      id: chat.id._serialized,
-      name: chat.name,
-      isGroup: chat.isGroup,
-      unreadCount: chat.unreadCount,
-      lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
-      timestamp: chat.timestamp
-    }));
-
-    global.io?.to(clientId).emit('chats-list', formatted);
-    return res.json({ clientId, chats: formatted });
-
+    return res.json({ clientId, chats });
   } catch (err) {
     console.error(`❌ Error fetching chats:`, err.message);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-// ✅ Messages
+//Messages 
 app.get('/messages/:clientId/:chatId', async (req, res) => {
   try {
     const { clientId, chatId } = req.params;
-    const order = (req.query.order || 'desc').toLowerCase(); // 'asc' | 'desc'
+    const order = (req.query.order || 'desc').toLowerCase();
     const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
 
-    const client = await safeGetClient(clientId);
-    if (!client) {
-      return res.status(503).json({ error: `Client ${clientId} restarting or not ready. Try again shortly.` });
-    }
-
-    const chat = await client.getChatById(chatId);
-    if (!chat) {
-      return res.status(404).json({ error: `Chat with ID ${chatId} not found.` });
-    }
-
-    const rawMessages = await chat.fetchMessages({ limit });
-
-    rawMessages.sort((a, b) => {
-      const ta = a.timestamp || 0;
-      const tb = b.timestamp || 0;
-      return order === 'desc' ? (tb - ta) : (ta - tb);
-    });
-
-    const processedMessages = await Promise.all(rawMessages.map(async (message) => {
-      const messageData = {
-        id: message.id._serialized,
-        from: message.from,
-        to: message.to,
-        timestamp: message.timestamp,
-        body: message.body,
-        type: message.type,
-        isQuoted: message.hasQuotedMsg,
-        quotedMessage: message.quotedMsg ? message.quotedMsg.body : null,
-        mediaUrl: null,
-        mediaInfo: null,
-      };
-
-      if (message.hasMedia) {
-        try {
-          const media = await message.downloadMedia();
-          if (media) {
-            const base64Url = `data:${media.mimetype};base64,${media.data}`;
-
-            if (media.mimetype.startsWith('image/')) {
-              messageData.mediaUrl = base64Url;
-              messageData.mediaInfo = { type: 'image', mimetype: media.mimetype, filename: media.filename || 'Unnamed file' };
-            } else if (media.mimetype.startsWith('video/')) {
-              messageData.mediaUrl = base64Url;
-              messageData.mediaInfo = { type: 'video', mimetype: media.mimetype, filename: media.filename || 'Unnamed file' };
-            } else if (media.mimetype.startsWith('application/')) {
-              messageData.mediaUrl = base64Url;
-              messageData.mediaInfo = { type: 'document', mimetype: media.mimetype, filename: media.filename || 'Unnamed file' };
-            } else if (media.mimetype.startsWith('audio/')) {
-              messageData.mediaUrl = base64Url;
-              messageData.mediaInfo = { type: 'audio', mimetype: media.mimetype, filename: media.filename || 'Unnamed audio file' };
-            }
-          }
-        } catch (error) {
-          console.error('Error processing media:', error);
-        }
-      }
-
-      return messageData;
-    }));
+    // ✅ Load from DB
+    const messages = await Message.find({ clientId, chatId })
+      .sort({ timestamp: order === 'desc' ? -1 : 1 })
+      .limit(limit)
+      .lean();
 
     return res.json({
       clientId,
       chatId,
       order,
-      count: processedMessages.length,
-      messages: processedMessages
+      count: messages.length,
+      messages
     });
-
   } catch (err) {
-    console.error(`❌ Error fetching messages for client ${req.params.clientId}, chat ${req.params.chatId}:`, err.message);
+    console.error(`❌ Error fetching messages:`, err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });

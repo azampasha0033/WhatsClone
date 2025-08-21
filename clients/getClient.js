@@ -118,6 +118,57 @@ function getClient(clientId) {
     sessionStatus.set(clientId, 'connected');
     global.io?.to(clientId).emit('ready', { message: 'connected' });
 
+    // --- Sync chats & messages ---
+  try {
+    console.log(`🔄 Syncing chats for ${clientId}...`);
+    const chats = await client.getChats();
+
+    for (const chat of chats) {
+      // Save chat (skip if already exists)
+      await Chat.updateOne(
+        { clientId, chatId: chat.id._serialized },
+        {
+          $set: {
+            clientId,
+            chatId: chat.id._serialized,
+            name: chat.name,
+            isGroup: chat.isGroup,
+            timestamp: chat.timestamp || new Date(),
+          }
+        },
+        { upsert: true }
+      );
+
+      // Fetch last 200 messages per chat (you can increase)
+      const msgs = await chat.fetchMessages({ limit: 200 });
+
+      for (const msg of msgs) {
+        await Message.updateOne(
+          { clientId, messageId: msg.id._serialized },
+          {
+            $setOnInsert: {
+              clientId,
+              chatId: chat.id._serialized,
+              messageId: msg.id._serialized,
+              from: msg.from,
+              to: msg.to,
+              type: msg.type,
+              body: msg.body,
+              timestamp: msg.timestamp,
+              mediaUrl: null, // you can add media download logic if needed
+            }
+          },
+          { upsert: true }
+        );
+      }
+    }
+
+    console.log(`✅ Chats & messages synced for ${clientId}`);
+  } catch (err) {
+    console.error(`❌ Error syncing for ${clientId}:`, err.message);
+  }
+
+  
     try {
       const page = client.pupPage;
       if (page && !page.__consoleHooked) {
