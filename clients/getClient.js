@@ -6,7 +6,6 @@ import qrcode from 'qrcode';
 import { MessageQueue } from '../db/messageQueue.js';
 import { ClientModel } from '../db/clients.js';
   
-  
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
 export { getClient, sessionStatus };
