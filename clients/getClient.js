@@ -60,28 +60,46 @@ function extractOrderNumberFromCorrelation(corr) {
   return m ? m[1] : null;
 }
 
+function cleanupSingletonLock(clientId) {
+  try {
+    const sessionDir = path.join(sessionsPath, `session-${clientId}`);
+    const lockFile = path.join(sessionDir, "SingletonLock");
+    if (fs.existsSync(lockFile)) {
+      fs.unlinkSync(lockFile);
+      console.log(`🧹 Removed stale Puppeteer lock for ${clientId}`);
+    }
+  } catch (err) {
+    console.warn(`⚠️ Failed to cleanup lock for ${clientId}:`, err.message);
+  }
+}
+
+
 /* -------------------------------- getClient -------------------------------- */
 export function getClient(clientId) {
-  if (clients.has(clientId)) return clients.get(clientId);
+    if (clients.has(clientId)) return clients.get(clientId);
 
   console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
 
-  const client = new Client({
+    // 🧹 cleanup stale lock
+  cleanupSingletonLock(clientId);
+
+
+const client = new Client({
     authStrategy: new LocalAuth({
-      dataPath:sessionsPath,
+      dataPath: sessionsPath,
       clientId,
     }),
     puppeteer: {
       headless: true,
       args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-extensions',
-        '--disable-gpu',
-        '--no-zygote',
-        '--single-process',
-        '--js-flags=--expose-gc',
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-extensions",
+        "--disable-gpu",
+        "--no-zygote",
+        "--single-process",
+        "--js-flags=--expose-gc",
       ],
     },
   });

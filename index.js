@@ -88,9 +88,10 @@ async function safeGetClient(clientId) {
   if (!client) return null;
 
 if (!client.pupPage || client.pupPage.isClosed()) {
-  console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
+  console.warn(`⚠️ Client ${clientId}: Puppeteer page closed. Recycling in 5s...`);
   try { await client.destroy(); } catch {}
-  await getClient(clientId); // restart
+  clients.delete(clientId);
+  setTimeout(() => getClient(clientId), 5000);
   return null;
 }
 
