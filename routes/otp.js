@@ -1,6 +1,6 @@
 import express from 'express';
 import { generateOtp, verifyOtp } from '../services/otpService.js';
-import { getClient } from '../clients/getClient.js';
+import { getClient, isClientReady } from '../clients/getClient.js';  // ✅ only once
 
 const router = express.Router();
 
@@ -12,21 +12,21 @@ router.post('/send', async (req, res) => {
       return res.status(400).json({ error: 'Phone and clientId are required' });
     }
 
-    // ✅ generate + quota check
-    const code = await generateOtp(phone, clientId);
-
-    // ✅ get WA client to actually send message
-    const client = getClient(clientId);
-    if (!client) {
-      return res.status(400).json({ error: `Client ${clientId} not initialized` });
+    // check WhatsApp session status
+    if (!isClientReady(clientId)) {
+      return res.status(400).json({ error: `Client ${clientId} not ready. Please scan QR first.` });
     }
 
+    const code = await generateOtp(phone, clientId);
+
+    const client = getClient(clientId);
     const chatId = phone.replace(/\D/g, '') + '@c.us';
+
     await client.sendMessage(chatId, `🔑 Your OTP is: ${code}`);
 
     res.json({ ok: true, phone });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
