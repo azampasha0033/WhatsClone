@@ -13,7 +13,6 @@ import otpRoute from './routes/otp.js';
 
 import fs from 'fs';
 
-
 // Route imports
 import qrRoute from './routes/qrCode.js';
 import sendMessageRoute from './routes/sendMessage.js';
@@ -23,17 +22,15 @@ import sendPollMessageRoute from './routes/sendPollMessage.js';
 import authRoute from './routes/auth.js';
 import labelRoute from './routes/labels.js';
 import { jwtAuth } from './middleware/jwtAuth.js';
-import subscribeRoutes  from './routes/subscribe.js';
+import subscribeRoutes from './routes/subscribe.js';
 import subscriptionsStatusRoute from './routes/subscriptionsStatus.js';
 import { requireActivePlanForClient } from './middleware/requireActivePlanForClient.js';
 import getApiKeyRoute from './routes/getApiKey.js';
-import uploadRouter from "./routes/upload.js";
+import uploadRouter from './routes/upload.js';
 import path from 'path';
-// index.js
 
-import { getClient, getQRCode, isClientReady } from './clients/getClient.js';
-
-
+// ✅ Import with sessionStatus + clients
+import { getClient, getQRCode, isClientReady, sessionStatus, clients } from './clients/getClient.js';
 
 // import usersList from './routes/users-list.js';
 
@@ -46,10 +43,10 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*", // allow all domains
-    methods: ["GET", "POST"],
-    credentials: true
-  }
+    origin: '*', // allow all domains
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
 });
 
 global.io = io;
@@ -57,10 +54,13 @@ global.io = io;
 app.use(cors());
 app.use(express.json());
 app.use('/labels', labelRoute);
-app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
+app.use(
+  '/uploads',
+  express.static(process.env.BASE_DIR || path.join(process.cwd(), 'uploads'))
+);
 
 // API routes
-app.use("/upload", uploadRouter);
+app.use('/upload', uploadRouter);
 app.use('/otp', otpRoute);
 app.use('/api', subscribeRoutes);
 app.use('/subscriptions', subscriptionsStatusRoute);
@@ -89,14 +89,15 @@ async function safeGetClient(clientId) {
   const client = getClient(clientId);
   if (!client) return null;
 
-if (!client.pupPage || client.pupPage.isClosed()) {
-  console.warn(`⚠️ Client ${clientId}: Puppeteer page closed. Recycling in 5s...`);
-  try { await client.destroy(); } catch {}
-  clients.delete(clientId);
-  setTimeout(() => getClient(clientId), 5000);
-  return null;
-}
-
+  if (!client.pupPage || client.pupPage.isClosed()) {
+    console.warn(`⚠️ Client ${clientId}: Puppeteer page closed. Recycling in 5s...`);
+    try {
+      await client.destroy();
+    } catch {}
+    clients.delete(clientId);
+    setTimeout(() => getClient(clientId), 5000);
+    return null;
+  }
 
   if (!isClientReady(clientId)) {
     console.warn(`⚠️ Client ${clientId} not ready yet.`);
@@ -111,9 +112,6 @@ if (!client.pupPage || client.pupPage.isClosed()) {
 /* -------------------------------------------------------------------------- */
 
 // ✅ Chats
-// index.js
-
-
 app.get('/chats/:clientId', async (req, res) => {
   try {
     let { clientId } = req.params;
@@ -127,9 +125,7 @@ app.get('/chats/:clientId', async (req, res) => {
     }
 
     // ✅ Load from DB (no WhatsApp delay)
-    const chats = await Chat.find({ clientId })
-      .sort({ updatedAt: -1 })
-      .lean();
+    const chats = await Chat.find({ clientId }).sort({ updatedAt: -1 }).lean();
 
     return res.json({ clientId, chats });
   } catch (err) {
@@ -138,7 +134,7 @@ app.get('/chats/:clientId', async (req, res) => {
   }
 });
 
-//Messages 
+// ✅ Messages
 app.get('/messages/:clientId/:chatId', async (req, res) => {
   try {
     const { clientId, chatId } = req.params;
@@ -156,7 +152,7 @@ app.get('/messages/:clientId/:chatId', async (req, res) => {
       chatId,
       order,
       count: messages.length,
-      messages
+      messages,
     });
   } catch (err) {
     console.error(`❌ Error fetching messages:`, err.message);
@@ -175,7 +171,7 @@ app.get('/status/:clientId', (req, res) => {
     return res.json({
       clientId,
       ready: isReady,
-      qrAvailable: !!qr
+      qrAvailable: !!qr,
     });
   } catch (err) {
     console.error('❌ Error in /status route:', err);
@@ -193,57 +189,56 @@ const startServer = async () => {
 
   try {
     // Restore all clients on startup
-const allClients = await ClientModel.find({}, 'clientId');
-for (const { clientId } of allClients) {
-  try {
-    console.log(`🔄 Restoring session for: ${clientId}`);
-    getClient(clientId);  // this will reuse LocalAuth if session folder exists
-  } catch (err) {
-    console.error(`❌ Failed to restore ${clientId}:`, err.message);
-  }
-}
-
-
+    const allClients = await ClientModel.find({}, 'clientId');
+    for (const { clientId } of allClients) {
+      try {
+        console.log(`🔄 Restoring session for: ${clientId}`);
+        getClient(clientId); // this will reuse LocalAuth if session folder exists
+      } catch (err) {
+        console.error(`❌ Failed to restore ${clientId}:`, err.message);
+      }
+    }
   } catch (err) {
     console.error('❌ Error fetching clients on startup:', err.message);
   }
 
- io.on('connection', (socket) => {
-  console.log('🔌 Socket.io client connected');
+  io.on('connection', (socket) => {
+    console.log('🔌 Socket.io client connected');
 
-  socket.on('join-client-room', (clientId) => {
-    if (!clientId) return;
-    console.log('📡 join-client-room received:', clientId);
+    socket.on('join-client-room', (clientId) => {
+      if (!clientId) return;
+      console.log('📡 join-client-room received:', clientId);
 
-    // prevent duplicate joins
-    if (socket.rooms.has(clientId)) {
-      console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
-      return;
-    }
+      // prevent duplicate joins
+      if (socket.rooms.has(clientId)) {
+        console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
+        return;
+      }
 
-    socket.join(clientId);
+      socket.join(clientId);
 
-    // immediately send current session status
-    const status = sessionStatus.get(clientId) || 'disconnected';
-    socket.emit('session-status', { clientId, status });
+      // immediately send current session status
+      const status = sessionStatus.get(clientId) || 'disconnected';
+      socket.emit('session-status', { clientId, status });
+    });
+
+    socket.on('disconnect', () => {
+      console.log(`❌ Socket disconnected (id=${socket.id})`);
+    });
   });
 
-  socket.on('disconnect', () => {
-    console.log(`❌ Socket disconnected (id=${socket.id})`);
-
-  });
-});
-
-  server.listen(PORT, () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
-  }).on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use.`);
-      process.exit(1);
-    } else {
-      throw err;
-    }
-  });
+  server
+    .listen(PORT, () => {
+      console.log(`🚀 Server running at http://localhost:${PORT}`);
+    })
+    .on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use.`);
+        process.exit(1);
+      } else {
+        throw err;
+      }
+    });
 };
 
 startServer();
