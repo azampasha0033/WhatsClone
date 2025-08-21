@@ -8,6 +8,7 @@ import { ClientModel } from '../db/clients.js';
   
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
+export { getClient, getQRCode, sessionStatus };
 
 import fs from 'fs';
 import path from 'path';
@@ -23,7 +24,6 @@ const readyFlags = new Map();
 // ✅ add this new map
 const sessionStatus = new Map();
 
-export { getClient, getQRCode, isClientReady, sessionStatus };
 
 
 const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
@@ -390,3 +390,5 @@ export function getQRCode(clientId) {
 export function isClientReady(clientId) {
   return readyFlags.get(clientId) === true;
 }
+
+
