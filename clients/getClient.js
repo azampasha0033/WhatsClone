@@ -106,10 +106,9 @@ function getClient(clientId) {
     console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
   });
 
-  client.on('authenticated', () => {
-    console.log(`🔐 Authenticated: ${clientId}`);
-  });
-
+client.on('authenticated', () => {
+  console.log(`🔐 Authenticated: ${clientId}`);
+});
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
     console.log(`✅ Client ready: ${clientId}`);
@@ -168,7 +167,7 @@ function getClient(clientId) {
     console.error(`❌ Error syncing for ${clientId}:`, err.message);
   }
 
-  
+
     try {
       const page = client.pupPage;
       if (page && !page.__consoleHooked) {
@@ -262,6 +261,30 @@ function getClient(clientId) {
       }
     }
   });
+
+
+  client.on('auth_failure', async (msg) => {
+  console.error(`❌ Auth failure for ${clientId}: ${msg}`);
+  readyFlags.set(clientId, false);
+  sessionStatus.set(clientId, 'disconnected');
+
+  await ClientModel.updateOne(
+    { clientId },
+    { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'AUTH_FAILURE' } }
+  ).catch(() => null);
+
+  // force QR regeneration
+  try { await client.destroy(); } catch {}
+  clients.delete(clientId);
+  qrCodes.delete(clientId);
+  readyFlags.delete(clientId);
+  sessionStatus.delete(clientId);
+
+  // auto re-init → new QR will be emitted
+  getClient(clientId);
+});
+
+
 
   /* ------------------------------- New Message ------------------------------ */
   client.on('message', async (msg) => {

@@ -188,15 +188,17 @@ const startServer = async () => {
   await connectDB();
 
   try {
- const activeClients = await ClientModel.find({ sessionStatus: 'connected' }, 'clientId');
+    
+const allClients = await ClientModel.find({}, 'clientId');
 await Promise.all(
-  activeClients.map(async ({ clientId }) => {
+  allClients.map(async ({ clientId }) => {
     try {
       const client = await safeGetClient(clientId);
       if (client) {
         console.log(`✅ Restored WhatsApp client for: ${clientId}`);
       } else {
-        console.warn(`⚠️ Client ${clientId} marked connected in DB but not ready. Waiting for QR.`);
+        console.warn(`⚠️ Client ${clientId} not ready → re-initializing`);
+        getClient(clientId); // triggers restore or QR
       }
     } catch (err) {
       console.error(`❌ Failed to restore client ${clientId}:`, err.message);
