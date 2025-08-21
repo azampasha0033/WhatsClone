@@ -100,11 +100,24 @@ async function safeGetClient(clientId) {
 /* -------------------------------------------------------------------------- */
 
 // ✅ Chats
+// ✅ Fix in index.js route /chats/:clientId
+import mongoose from 'mongoose';
+import { ClientModel } from './db/clients.js';
+
 app.get('/chats/:clientId', async (req, res) => {
   try {
-    const clientId = req.params.clientId;
-    const client = await safeGetClient(clientId);
+    let { clientId } = req.params;
 
+    // 🔑 If we receive a Mongo ObjectId, resolve it to real clientId
+    if (mongoose.Types.ObjectId.isValid(clientId)) {
+      const record = await ClientModel.findById(clientId);
+      if (record && record.clientId) {
+        console.log(`Resolved clientId: ${record.clientId} using field: _id`);
+        clientId = record.clientId;
+      }
+    }
+
+    const client = await safeGetClient(clientId);
     if (!client) {
       return res.status(503).json({ error: `Client ${clientId} restarting or not ready. Try again shortly.` });
     }
@@ -118,29 +131,24 @@ app.get('/chats/:clientId', async (req, res) => {
       return res.status(500).json({ error: `Client ${clientId} needs restart` });
     }
 
-    global.io?.to(clientId).emit('chats-list', chats.map(chat => ({
+    const formatted = chats.map(chat => ({
       id: chat.id._serialized,
       name: chat.name,
       isGroup: chat.isGroup,
       unreadCount: chat.unreadCount,
       lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
       timestamp: chat.timestamp
-    })));
+    }));
 
-    return res.json({ clientId, chats: chats.map(chat => ({
-      id: chat.id._serialized,
-      name: chat.name,
-      isGroup: chat.isGroup,
-      unreadCount: chat.unreadCount,
-      lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
-      timestamp: chat.timestamp
-    })) });
+    global.io?.to(clientId).emit('chats-list', formatted);
+    return res.json({ clientId, chats: formatted });
 
   } catch (err) {
-    console.error(`❌ Error fetching chats for client ${req.params.clientId}:`, err.message);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    console.error(`❌ Error fetching chats:`, err.message);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 // ✅ Messages
 app.get('/messages/:clientId/:chatId', async (req, res) => {
