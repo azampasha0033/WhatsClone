@@ -2,26 +2,25 @@
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth, Poll, MessageMedia } = pkg;
 import qrcode from 'qrcode';
-import { MongoStore } from 'wwebjs-mongo';
-import mongoose from 'mongoose';
 
 import { MessageQueue } from '../db/messageQueue.js';
 import { ClientModel } from '../db/clients.js';
+  
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
-import { Chat } from '../models/Chat.js';
-import { Message } from '../models/Message.js';
+
+import fs from 'fs';
+import path from 'path';
 
 // ⬇️ NEW: quota services
 import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 
-let mongoStore;
-
-// ----------------------------- In-Memory Stores ----------------------------
 const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
-const sessionStatus = new Map();   // ✅ Added
+// const sessionsPath = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
+
+const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
 
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
@@ -30,40 +29,61 @@ function getShortMsgId(serialized) {
   return parts.length ? parts[parts.length - 1] : serialized;
 }
 
-async function initStore() {
-  if (!mongoStore) {
-    mongoStore = new MongoStore({ mongoose });
-  }
-  return mongoStore;
+function extractParentMessageIdFromVote(vote) {
+  // vote sometimes has only the short id; sometimes serialized
+  return (
+    vote?.pollCreationMessageKey?._serialized ||
+    vote?.pollCreationMessageKey?.id ||
+    vote?.parentMsgKey?._serialized ||
+    vote?.parentMsgKey?.id ||
+    vote?.quotedStanzaID ||
+    null
+  );
+}
+
+// Map WhatsApp's selected option objects to plain text labels
+function mapSelectedLabels(selected, options) {
+  return (Array.isArray(selected) ? selected : [])
+    .map(sel => {
+      if (sel?.name) return sel.name;                                // object form {name}
+      if (typeof sel === 'number' && options?.[sel]?.name) return options[sel].name; // index form
+      if (typeof sel === 'string') return sel;                        // already a label
+      return String(sel);
+    })
+    .filter(Boolean);
+}
+
+function extractOrderNumberFromCorrelation(corr) {
+  if (!corr) return null;
+  const s = String(corr);
+  const m = s.match(/(?:confirm:)?(\d+)/i); // "confirm:10000013" → 10000013
+  return m ? m[1] : null;
 }
 
 /* -------------------------------- getClient -------------------------------- */
-async function getClient(clientId) {
+export function getClient(clientId) {
   if (clients.has(clientId)) return clients.get(clientId);
 
   console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
 
-  const store = await initStore();
-
   const client = new Client({
+    authStrategy: new LocalAuth({
+      dataPath:sessionsPath,
+      clientId,
+    }),
     puppeteer: {
       headless: true,
-      executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
+        '--disable-extensions',
+        '--disable-gpu',
         '--no-zygote',
         '--single-process',
-        '--disable-gpu'
-      ]
+        '--js-flags=--expose-gc',
+      ],
     },
-    authStrategy: new LocalAuth({
-      clientId,
-      store,   // ✅ Mongo-backed session store (no QR after restart)
-    }),
   });
 
   /* --------------------------------- QR Code -------------------------------- */
@@ -79,7 +99,6 @@ async function getClient(clientId) {
 
     const qrData = await qrcode.toDataURL(qr);
     qrCodes.set(clientId, qrData);
-    sessionStatus.set(clientId, 'pending');
     global.io?.to(clientId).emit('qr', { qr: qrData });
 
     await ClientModel.updateOne(
@@ -98,80 +117,15 @@ async function getClient(clientId) {
     console.log(`✅ Client ready: ${clientId}`);
     qrCodes.set(clientId, null);
     readyFlags.set(clientId, true);
-    sessionStatus.set(clientId, 'connected');
     global.io?.to(clientId).emit('ready', { message: 'connected' });
 
-    // --- Sync chats & messages ---
-    try {
-      console.log(`🔄 Syncing chats for ${clientId}...`);
-      const chats = await client.getChats();
-
-      for (const chat of chats) {
-        await Chat.updateOne(
-          { clientId, chatId: chat.id._serialized },
-          {
-            $set: {
-              clientId,
-              chatId: chat.id._serialized,
-              name: chat.name,
-              isGroup: chat.isGroup,
-              timestamp: chat.timestamp || new Date(),
-            }
-          },
-          { upsert: true }
-        );
-
-        const msgs = await chat.fetchMessages({ limit: 200 });
-        for (const msg of msgs) {
-          await Message.updateOne(
-            { clientId, messageId: msg.id._serialized },
-            {
-              $setOnInsert: {
-                clientId,
-                chatId: chat.id._serialized,
-                messageId: msg.id._serialized,
-                from: msg.from,
-                to: msg.to,
-                type: msg.type,
-                body: msg.body,
-                timestamp: msg.timestamp,
-                mediaUrl: null,
-              }
-            },
-            { upsert: true }
-          );
-        }
-      }
-
-      console.log(`✅ Chats & messages synced for ${clientId}`);
-    } catch (err) {
-      console.error(`❌ Error syncing for ${clientId}:`, err.message);
-    }
-
+    // ensure page console piping after ready (best-effort)
     try {
       const page = client.pupPage;
       if (page && !page.__consoleHooked) {
         page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
         page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
         page.on('pageerror', (e) => console.warn('📄[WA] PAGEEXCEPTION', e?.message || e));
-
-        page.on('close', async () => {
-          console.warn(`⚠️ Puppeteer page closed for ${clientId}`);
-          readyFlags.set(clientId, false);
-          sessionStatus.set(clientId, 'disconnected');
-
-          await ClientModel.updateOne(
-            { clientId },
-            { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'PAGE_CLOSED' } }
-          ).catch(() => null);
-
-          try { await client.destroy(); } catch {}
-          clients.delete(clientId);
-          qrCodes.delete(clientId);
-          readyFlags.delete(clientId);
-          sessionStatus.delete(clientId);
-        });
-
         page.__consoleHooked = true;
         console.log('🔌 ready: page console piping enabled');
       }
@@ -181,7 +135,12 @@ async function getClient(clientId) {
 
     await ClientModel.updateOne(
       { clientId },
-      { $set: { sessionStatus: 'connected', lastConnectedAt: new Date() } }
+      {
+        $set: {
+          sessionStatus: 'connected',
+          lastConnectedAt: new Date()
+        }
+      }
     ).catch((e) => console.warn('⚠️ ClientModel connected warn:', e?.message));
     console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
 
@@ -195,28 +154,90 @@ async function getClient(clientId) {
         let payload = null;
         try { payload = JSON.parse(message); } catch {}
 
-        let sent;
+        // ⬇️ Determine how many sends this queued item requires
+        const isPoll = type === 'poll';
+        const willSendIntro = isPoll && payload?.introText && String(payload.introText).trim().length > 0;
+        const requiredSends = isPoll ? (willSendIntro ? 2 : 1) : 1;
 
-        if (type === 'poll') {
-          if (payload?.introText) {
-            await client.sendMessage(chatId, String(payload.introText));
+        // ⬇️ Check quota before sending this queued item
+        let subInfo;
+        try {
+          subInfo = await assertCanSendMessage(clientId);
+          if (subInfo.remaining < requiredSends) {
+            const msg = `Plan limit reached: need ${requiredSends}, have ${subInfo.remaining}.`;
+            console.warn(`⛔ quota: ${msg}`);
+            await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: msg } });
+            continue; // move to next queued item
+          }
+        } catch (qe) {
+          const msg = `No active subscription: ${qe.message}`;
+          console.warn(`⛔ quota: ${msg}`);
+          await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: msg } });
+          continue;
+        }
+
+        let sent;
+        let consumed = 0;
+
+        if (isPoll) {
+          // 1) optional intro text BEFORE poll (consumes 1)
+          if (willSendIntro) {
+            const introMsg = await client.sendMessage(chatId, String(payload.introText));
+            await SentMessage.create({
+              clientId,
+              to: chatId,
+              type: 'message',
+              messageId: introMsg?.id?._serialized || null,
+              messageIdShort: getShortMsgId(introMsg?.id?._serialized || null),
+              payload: { message: String(payload.introText), correlationId: payload?.correlationId || null },
+              correlationId: payload?.correlationId || null
+            }).catch(() => {});
+            if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+            consumed += 1;
           }
 
+          // 2) send the poll (consumes 1)
           const qRaw = (payload?.question || '').trim();
           const ops = Array.isArray(payload?.options) ? payload.options.map(o => String(o).trim()) : [];
           if (!qRaw || ops.length === 0) {
-            console.error(`❌ Invalid poll payload`, payload);
+            const msg = `Invalid poll payload for ${to}`;
+            console.error(`❌ ${msg}`, payload);
+            await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: msg } });
             continue;
           }
 
-          const poll = new Poll(qRaw, ops, {
-            allowMultipleAnswers: payload?.allowMultipleAnswers === true
+          const corr = payload?.correlationId || null; // e.g. "confirm:10000013"
+          const qWithId = corr ? `${qRaw} (ID:${corr})` : qRaw;
+
+          const poll = new Poll(qWithId, ops, {
+            allowMultipleAnswers: payload?.allowMultipleAnswers === true ? true : false,
+            allowResubmission: false
           });
 
           sent = await client.sendMessage(chatId, poll);
-          console.log('✉️ poll sent →', sent?.id?._serialized);
+          const mid = sent?.id?._serialized || null;
+          console.log('✉️ poll sent →', mid);
+
+          await SentMessage.create({
+            clientId,
+            to: chatId,
+            type: 'poll',
+            messageId: mid,
+            messageIdShort: getShortMsgId(mid),       // store short id too
+            payload: {
+              question: qWithId,
+              options: ops,
+              allowMultipleAnswers: payload?.allowMultipleAnswers === true ? true : false,
+              correlationId: corr
+            },
+            correlationId: corr,
+            answered: false
+          }).catch(() => {});
+          if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+          consumed += 1;
 
         } else if (payload?.attachment) {
+          // media (consumes 1)
           let media;
           if (String(payload.attachment).startsWith('http')) {
             media = await MessageMedia.fromUrl(payload.attachment);
@@ -229,44 +250,48 @@ async function getClient(clientId) {
           }
           sent = await client.sendMessage(chatId, media, { caption: payload.message || '' });
 
+          await SentMessage.create({
+            clientId,
+            to: chatId,
+            type: 'media',
+            messageId: sent?.id?._serialized || null,
+            messageIdShort: getShortMsgId(sent?.id?._serialized || null),
+            payload,
+            correlationId: payload?.correlationId || null
+          }).catch(() => {});
+          if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+          consumed += 1;
+
         } else {
-          let text;
-          if (payload?.message) {
-            text = payload.message;
-          } else {
-            const { generateOtp } = await import('../services/otpService.js');
-            const otp = await generateOtp(chatId.replace('@c.us', ''), clientId);
-            text = `🔑 Your OTP is: ${otp}`;
-          }
+          // text (consumes 1)
+          const text = payload?.message ?? message;
           sent = await client.sendMessage(chatId, text);
+
+          await SentMessage.create({
+            clientId,
+            to: chatId,
+            type: 'message',
+            messageId: sent?.id?._serialized || null,
+            messageIdShort: getShortMsgId(sent?.id?._serialized || null),
+            payload,
+            correlationId: payload?.correlationId || null
+          }).catch(() => {});
+          if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+          consumed += 1;
         }
 
-        console.log(`✅ queued item sent type=${type} to=${to}`);
+        await MessageQueue.updateOne({ _id }, { $set: { status: 'sent', sentAt: new Date(), consumed } }).catch(() => {});
+        await ClientModel.updateOne({ clientId }, { $inc: { messagesCount: consumed } }).catch(() => {});
+        console.log(`✅ queued item sent type=${type} to=${to} (consumed ${consumed})`);
       } catch (err) {
         console.error(`⛔ queued send failed to ${to}:`, err.message);
+        await MessageQueue.updateOne({ _id }, { $set: { status: 'failed', error: err.message } }).catch(() => {});
       }
     }
   });
 
-  client.on('auth_failure', async (msg) => {
-    console.error(`❌ Auth failure for ${clientId}: ${msg}`);
-    readyFlags.set(clientId, false);
-    sessionStatus.set(clientId, 'disconnected');
 
-    await ClientModel.updateOne(
-      { clientId },
-      { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'AUTH_FAILURE' } }
-    ).catch(() => null);
-
-    try { await client.destroy(); } catch {}
-    clients.delete(clientId);
-    qrCodes.delete(clientId);
-    readyFlags.delete(clientId);
-    sessionStatus.delete(clientId);
-
-    getClient(clientId); // auto re-init
-  });
-
+  /* ------------------------------- New Message ------------------------------ */
   client.on('message', async (msg) => {
     try {
       const messageData = {
@@ -277,11 +302,13 @@ async function getClient(clientId) {
         body: msg.body,
         type: msg.type,
         hasMedia: msg.hasMedia,
-        ack: msg.ack
+         ack: msg.ack   // ✅ add this
       };
 
+      // 🔹 Emit new message in real-time
       global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
 
+      // 🔹 Also emit updated chat info (so frontend can move chat to top)
       const chat = await msg.getChat();
       const chatData = {
         id: chat.id._serialized,
@@ -298,25 +325,52 @@ async function getClient(clientId) {
     }
   });
 
+
+
+  /* --------------------------- Poll vote (LOCK on first) --------------------------- */
   client.on('vote_update', async (vote) => {
     try {
       const parentIdRaw = extractParentMessageIdFromVote(vote);
-      if (!parentIdRaw) return;
-
+      if (!parentIdRaw) {
+        console.log('⚠️ vote_update without parentMessageId, skipping');
+        return;
+      }
       const parentShort = getShortMsgId(parentIdRaw);
-      let sent = await SentMessage.findOne({ type: 'poll', messageId: parentIdRaw }) ||
-                 await SentMessage.findOne({ type: 'poll', messageId: { $regex: `${parentShort}$` } }) ||
-                 await SentMessage.findOne({ type: 'poll', messageIdShort: parentShort });
-      if (!sent) return;
 
-      if (sent.answered === true) return;
+      // Resolve original poll
+      let sent = await SentMessage.findOne({ type: 'poll', messageId: parentIdRaw });
+      if (!sent) {
+        sent = await SentMessage.findOne({ type: 'poll', messageId: { $regex: `${parentShort}$` } });
+      }
+      if (!sent) {
+        sent = await SentMessage.findOne({ type: 'poll', messageIdShort: parentShort });
+      }
+      if (!sent) {
+       // console.log('⚠️ vote_update: parent poll not found for', parentIdRaw, 'short=', parentShort);
+        return;
+      }
 
-      const selected = vote?.selectedOptions || vote?.vote?.selectedOptions || vote?.choices || vote?.options || [];
+      // HARD LOCK: ignore further updates after first answer
+      if (sent.answered === true) {
+        console.log('🔒 vote_update ignored (already answered):', sent.messageId);
+        return;
+      }
+
+      // Extract selection → labels
+      const selected =
+        vote?.selectedOptions ||
+        vote?.vote?.selectedOptions ||
+        vote?.choices ||
+        vote?.options ||
+        [];
+
       const labels = mapSelectedLabels(selected, sent.payload?.options);
 
+      // Correlation → order number
       const corr = sent.correlationId || sent.payload?.correlationId || null;
       const orderNumber = extractOrderNumberFromCorrelation(corr);
 
+      // Atomic lock
       const res = await SentMessage.updateOne(
         { _id: sent._id, answered: { $ne: true } },
         {
@@ -328,10 +382,16 @@ async function getClient(clientId) {
           }
         }
       );
-      if (res.modifiedCount === 0) return;
+      if (res.modifiedCount === 0) {
+        console.log('🔒 vote_update lost race (already locked):', sent.messageId);
+        return;
+      }
 
-      let voterWid = vote?.sender || vote?.author || vote?.from || vote?.voterId || vote?.participant || null;
-      if (!voterWid && typeof sent.to === 'string' && sent.to.endsWith('@c.us')) voterWid = sent.to;
+      // Persist per-voter once (idempotent)
+      const isDirectChat = typeof sent.to === 'string' && sent.to.endsWith('@c.us');
+      let voterWid =
+        vote?.sender || vote?.author || vote?.from || vote?.voterId || vote?.participant || null;
+      if (!voterWid && isDirectChat) voterWid = sent.to; // infer for 1:1 chat
 
       if (voterWid) {
         await PollVote.updateOne(
@@ -353,6 +413,7 @@ async function getClient(clientId) {
         );
       }
 
+      // Notify
       global.io?.to(sent.clientId)?.emit('poll_vote', {
         correlationId: corr,
         orderNumber,
@@ -362,28 +423,28 @@ async function getClient(clientId) {
         voter: voterWid || null
       });
 
-      console.log('✅ vote_update recorded →', { orderNumber, labels, voter: voterWid || '' });
+      console.log('✅ vote_update recorded (locked) →', { orderNumber, labels, voter: voterWid || '' });
     } catch (e) {
       console.error('❌ vote_update handler error:', e?.message);
     }
   });
 
+  /* ------------------------------- Disconnected ----------------------------- */
   client.on('disconnected', async (reason) => {
     console.warn(`🔌 Disconnected (${clientId}): ${reason}`);
     readyFlags.set(clientId, false);
-    sessionStatus.set(clientId, 'disconnected');
-
     await ClientModel.updateOne(
       { clientId },
       { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: reason } }
     ).catch(() => null);
 
+    // Full recycle on logout/nav for stability
     if (reason === 'LOGOUT' || reason === 'NAVIGATION') {
       try { await client.destroy(); } catch {}
       clients.delete(clientId);
       qrCodes.delete(clientId);
       readyFlags.delete(clientId);
-      sessionStatus.delete(clientId);
+      // re-init from outside if needed
     }
   });
 
@@ -393,13 +454,9 @@ async function getClient(clientId) {
 }
 
 /* --------------------------------- Utilities ------------------------------- */
-function getQRCode(clientId) {
+export function getQRCode(clientId) {
   return qrCodes.get(clientId);
 }
-
-function isClientReady(clientId) {
+export function isClientReady(clientId) {
   return readyFlags.get(clientId) === true;
 }
-
-/* ---------------------------- Exports (Single) ----------------------------- */
-export { getClient, getQRCode, isClientReady, sessionStatus };

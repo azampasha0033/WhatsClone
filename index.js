@@ -189,23 +189,17 @@ const startServer = async () => {
   await connectDB();
 
   try {
-    
+    // Restore all clients on startup
 const allClients = await ClientModel.find({}, 'clientId');
-await Promise.all(
-  allClients.map(async ({ clientId }) => {
-    try {
-      const client = await safeGetClient(clientId);
-      if (client) {
-        console.log(`✅ Restored WhatsApp client for: ${clientId}`);
-      } else {
-        console.warn(`⚠️ Client ${clientId} not ready → re-initializing`);
-        getClient(clientId); // triggers restore or QR
-      }
-    } catch (err) {
-      console.error(`❌ Failed to restore client ${clientId}:`, err.message);
-    }
-  })
-);
+for (const { clientId } of allClients) {
+  try {
+    console.log(`🔄 Restoring session for: ${clientId}`);
+    getClient(clientId);  // this will reuse LocalAuth if session folder exists
+  } catch (err) {
+    console.error(`❌ Failed to restore ${clientId}:`, err.message);
+  }
+}
+
 
   } catch (err) {
     console.error('❌ Error fetching clients on startup:', err.message);
