@@ -269,44 +269,32 @@ const startServer = async () => {
     console.error('❌ Error fetching clients on startup:', err.message);
   }
 
-  io.on('connection', (socket) => {
-    console.log('🔌 Socket.io client connected');
+ io.on('connection', (socket) => {
+  console.log('🔌 Socket.io client connected');
 
-    socket.on('join-client-room', async (clientId) => {
-      if (!clientId) {
-        console.warn('⚠️ join-client-room received empty clientId. Ignoring.');
-        return;
-      }
+  socket.on('join-client-room', (clientId) => {
+    if (!clientId) return;
+    console.log('📡 join-client-room received:', clientId);
 
-      console.log(`📡 join-client-room received: ${clientId}`);
-      socket.join(clientId);
-      socket.clientId = clientId;
+    // prevent duplicate joins
+    if (socket.rooms.has(clientId)) {
+      console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
+      return;
+    }
 
-      const isReady = isClientReady(clientId);
-      socket.emit(isReady ? 'ready' : 'waiting', {
-        message: isReady ? '✅ Already connected to WhatsApp' : '⏳ Waiting for QR...'
-      });
-    });
+    socket.join(clientId);
 
-    socket.on('send-message', (messageData) => {
-      socket.to(messageData.clientId).emit('new-message', messageData);
-    });
-
-    socket.on('disconnect', async () => {
-      const clientId = socket.clientId;
-      console.log(`❌ Socket disconnected for clientId: ${clientId || 'unknown'}`);
-
-      if (clientId && !isClientReady(clientId)) {
-        await ClientModel.updateOne(
-          { clientId },
-          { $set: { sessionStatus: 'disconnected' } }
-        );
-        console.log(`🔴 sessionStatus set to 'disconnected' for ${clientId}`);
-      } else {
-        console.log(`ℹ️ Ignoring socket disconnect; client is still ready.`);
-      }
-    });
+    // immediately send current session status
+    const status = sessionStatus.get(clientId) || 'disconnected';
+    socket.emit('session-status', { clientId, status });
   });
+
+  socket.on('disconnect', () => {
+    console.log(`❌ Socket disconnected (id=${socket.id})`);
+
+  });
+});
+
 
   server.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
