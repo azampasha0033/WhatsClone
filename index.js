@@ -50,6 +50,7 @@ const io = new Server(server, {
 
 global.io = io;
 
+
 app.use(cors());
 app.use(express.json());
 app.use('/labels', labelsRouter);
