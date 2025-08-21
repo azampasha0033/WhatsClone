@@ -20,6 +20,12 @@ const qrCodes = new Map();
 const readyFlags = new Map();
 // const sessionsPath = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
 
+// ✅ add this new map
+const sessionStatus = new Map();
+
+export { getClient, getQRCode, isClientReady, sessionStatus };
+
+
 const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
 
 /* ------------------------------ Helper funcs ------------------------------ */

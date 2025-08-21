@@ -7,8 +7,9 @@ import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import { connectDB } from './db/mongo.js';
 import { ClientModel } from './db/clients.js';
-import { getClient, getQRCode, isClientReady } from './clients/getClient.js';
+
 import fs from 'fs';
+
 
 // Route imports
 import qrRoute from './routes/qrCode.js';
@@ -25,6 +26,9 @@ import { requireActivePlanForClient } from './middleware/requireActivePlanForCli
 import getApiKeyRoute from './routes/getApiKey.js';
 import uploadRouter from "./routes/upload.js";
 import path from 'path';
+// index.js
+import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
+
 
 // import usersList from './routes/users-list.js';
 
