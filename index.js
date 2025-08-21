@@ -10,7 +10,7 @@ import { ClientModel } from './db/clients.js';
 
 import fs from 'fs';
 
-
+import otpRoute from './routes/otp.js';
 // Route imports
 import qrRoute from './routes/qrCode.js';
 import sendMessageRoute from './routes/sendMessage.js';
@@ -53,7 +53,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/labels', labelsRouter);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
-
+app.use('/otp', otpRoute);
 // API routes
 app.use("/upload", uploadRouter);
 
