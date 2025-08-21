@@ -9,6 +9,7 @@ import { connectDB } from './db/mongo.js';
 import { ClientModel } from './db/clients.js';
 import { Chat } from './models/Chat.js';
 import { Message } from './models/Message.js';
+import otpRoute from './routes/otp.js';
 
 import fs from 'fs';
 
@@ -58,7 +59,7 @@ app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd
 
 // API routes
 app.use("/upload", uploadRouter);
-
+app.use('/otp', otpRoute);
 app.use('/api', subscribeRoutes);
 app.use('/subscriptions', subscriptionsStatusRoute);
 app.use('/auth', authRoute);
