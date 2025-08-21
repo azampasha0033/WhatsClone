@@ -188,17 +188,22 @@ const startServer = async () => {
   await connectDB();
 
   try {
-    const activeClients = await ClientModel.find({ sessionStatus: 'connected' }, 'clientId');
-    await Promise.all(
-      activeClients.map(async ({ clientId }) => {
-        try {
-          await getClient(clientId);
-          console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
-        } catch (err) {
-          console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
-        }
-      })
-    );
+ const activeClients = await ClientModel.find({ sessionStatus: 'connected' }, 'clientId');
+await Promise.all(
+  activeClients.map(async ({ clientId }) => {
+    try {
+      const client = await safeGetClient(clientId);
+      if (client) {
+        console.log(`✅ Restored WhatsApp client for: ${clientId}`);
+      } else {
+        console.warn(`⚠️ Client ${clientId} marked connected in DB but not ready. Waiting for QR.`);
+      }
+    } catch (err) {
+      console.error(`❌ Failed to restore client ${clientId}:`, err.message);
+    }
+  })
+);
+
   } catch (err) {
     console.error('❌ Error fetching clients on startup:', err.message);
   }
