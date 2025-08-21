@@ -30,7 +30,9 @@ import getApiKeyRoute from './routes/getApiKey.js';
 import uploadRouter from "./routes/upload.js";
 import path from 'path';
 // index.js
-import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
+
+import { getClient, getQRCode, isClientReady } from './clients/getClient.js';
+
 
 
 // import usersList from './routes/users-list.js';

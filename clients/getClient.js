@@ -18,6 +18,8 @@ import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
+export const sessionStatus = new Map();   // <-- add this
+
 // const sessionsPath = process.env.SESSIONS_DIR || '/var/data/wa-sessions';
 
 const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
@@ -119,11 +121,13 @@ const client = new Client({
     qrCodes.set(clientId, qrData);
     global.io?.to(clientId).emit('qr', { qr: qrData });
 
-    await ClientModel.updateOne(
-      { clientId },
-      { $set: { sessionStatus: 'pending' } }
-    ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
-    console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
+   await ClientModel.updateOne(
+  { clientId },
+  { $set: { sessionStatus: 'pending' } }
+);
+sessionStatus.set(clientId, 'pending');   // <-- add this
+
+
   });
 
   client.on('authenticated', () => {
@@ -151,16 +155,17 @@ const client = new Client({
       console.warn('⚠️ ready: console pipe failed:', e?.message);
     }
 
-    await ClientModel.updateOne(
-      { clientId },
-      {
-        $set: {
-          sessionStatus: 'connected',
-          lastConnectedAt: new Date()
-        }
-      }
-    ).catch((e) => console.warn('⚠️ ClientModel connected warn:', e?.message));
-    console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
+await ClientModel.updateOne(
+  { clientId },
+  {
+    $set: {
+      sessionStatus: 'connected',
+      lastConnectedAt: new Date()
+    }
+  }
+);
+sessionStatus.set(clientId, 'connected'); // <-- add this
+
 
     // === Process Queued Messages ===
     const queued = await MessageQueue.find({ clientId, status: 'pending' }).catch(() => []);
