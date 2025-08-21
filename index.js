@@ -101,8 +101,7 @@ async function safeGetClient(clientId) {
 
 // ✅ Chats
 // ✅ Fix in index.js route /chats/:clientId
-import mongoose from 'mongoose';
-import { ClientModel } from './db/clients.js';
+
 
 app.get('/chats/:clientId', async (req, res) => {
   try {
