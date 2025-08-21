@@ -170,6 +170,7 @@ for (const { to, message, _id, type } of queued) {
     let payload = null;
     try { payload = JSON.parse(message); } catch {}
 
+    
     let sent;
 
     if (type === 'poll') {
