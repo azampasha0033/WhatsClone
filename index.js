@@ -24,6 +24,7 @@ import subscriptionsStatusRoute from './routes/subscriptionsStatus.js';
 import { requireActivePlanForClient } from './middleware/requireActivePlanForClient.js';
 import getApiKeyRoute from './routes/getApiKey.js';
 import uploadRouter from "./routes/upload.js";
+import path from 'path';
 
 
 // import usersList from './routes/users-list.js';
@@ -52,6 +53,7 @@ app.use(express.json());
 app.use('/labels', labelRoute);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
 
+
 // API routes
 app.use("/upload", uploadRouter);
 
@@ -79,27 +81,32 @@ if (!fs.existsSync(sessionsPath)) {
 
 app.get('/chats/:clientId', async (req, res) => {
   try {
-    const clientId = req.params.clientId;  // Extract clientId from the request parameters
-    const client = getClient(clientId);    // Get the WhatsApp client using the clientId
+    const clientId = req.params.clientId;
+    const client = getClient(clientId);
 
     if (!client) {
       return res.status(404).json({ error: `Client with ID ${clientId} not found.` });
     }
 
-    // Fetch chats from the WhatsApp client (you may need to tweak this based on your WhatsApp client structure)
-    // const chats = await client.getChats();  
-
-    async function safeGetChats(client, clientId) {
-  if (!client || !client.pupPage || client.pupPage.isClosed()) {
-    throw new Error(`Client ${clientId}: Puppeteer page is closed`);
-  }
-  return client.getChats();
+    let chats;
+    try {
+   if (!client.pupPage || client.pupPage.isClosed()) {
+  console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
+  try { await client.destroy(); } catch {}
+  getClient(clientId); // auto restart the session
+  return res.status(500).json({ error: `Client ${clientId} restarted, try again in a few seconds` });
 }
+chats = await client.getChats();
 
-const chats = await safeGetChats(client, clientId);
+    } catch (err) {
+      console.error(`⚠️ getChats failed for ${clientId}:`, err.message);
+      // 🔄 Recycle client when getChats blows up
+      try { await client.destroy(); } catch {}
+      return res.status(500).json({ error: `Client ${clientId} needs restart` });
+    }
 
-
-     global.io?.to(clientId).emit('chats-list', chats.map(chat => ({
+    // Emit and respond
+    global.io?.to(clientId).emit('chats-list', chats.map(chat => ({
       id: chat.id._serialized,
       name: chat.name,
       isGroup: chat.isGroup,
@@ -108,24 +115,21 @@ const chats = await safeGetChats(client, clientId);
       timestamp: chat.timestamp
     })));
 
-    // If successful, return the chat data as JSON
-    return res.json({
-      clientId,
-      chats: chats.map(chat => ({
-        id: chat.id._serialized,  // Unique identifier for the chat
-        name: chat.name,          // Name of the contact or group
-        isGroup: chat.isGroup,    // Boolean to indicate if it's a group chat
-        unreadCount: chat.unreadCount,  // Number of unread messages
-        lastMessage: chat.lastMessage ? chat.lastMessage.body : null,  // Last message in the chat
-        timestamp: chat.timestamp // Timestamp of the last message
-      }))
-    });
+    return res.json({ clientId, chats: chats.map(chat => ({
+      id: chat.id._serialized,
+      name: chat.name,
+      isGroup: chat.isGroup,
+      unreadCount: chat.unreadCount,
+      lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
+      timestamp: chat.timestamp
+    })) });
 
   } catch (err) {
     console.error(`❌ Error fetching chats for client ${req.params.clientId}:`, err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 
 app.get('/messages/:clientId/:chatId', async (req, res) => {
@@ -140,9 +144,13 @@ app.get('/messages/:clientId/:chatId', async (req, res) => {
       return res.status(404).json({ error: `Client with ID ${clientId} not found.` });
     }
 
- if (!client || !client.pupPage || client.pupPage.isClosed()) {
-  throw new Error(`Client ${clientId}: Puppeteer page is closed`);
+if (!client || !client.pupPage || client.pupPage.isClosed()) {
+  console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
+  try { await client.destroy(); } catch {}
+  getClient(clientId); // auto restart the session
+  return res.status(500).json({ error: `Client ${clientId} restarted, try again in a few seconds` });
 }
+
 
 const chat = await client.getChatById(chatId);
 if (!chat) {
