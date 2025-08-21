@@ -2,25 +2,26 @@
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth, Poll, MessageMedia } = pkg;
 import qrcode from 'qrcode';
+import { MongoStore } from 'wwebjs-mongo';
+import mongoose from 'mongoose';
 
 import { MessageQueue } from '../db/messageQueue.js';
 import { ClientModel } from '../db/clients.js';
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
-
-import fs from 'fs';
-import path from 'path';
+import { Chat } from '../models/Chat.js';
+import { Message } from '../models/Message.js';
 
 // ⬇️ NEW: quota services
 import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
+
+let mongoStore;
 
 // ----------------------------- In-Memory Stores ----------------------------
 const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
 const sessionStatus = new Map();   // ✅ Added
-
-const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
 
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
@@ -29,60 +30,41 @@ function getShortMsgId(serialized) {
   return parts.length ? parts[parts.length - 1] : serialized;
 }
 
-function extractParentMessageIdFromVote(vote) {
-  return (
-    vote?.pollCreationMessageKey?._serialized ||
-    vote?.pollCreationMessageKey?.id ||
-    vote?.parentMsgKey?._serialized ||
-    vote?.parentMsgKey?.id ||
-    vote?.quotedStanzaID ||
-    null
-  );
-}
-
-// Map WhatsApp's selected option objects to plain text labels
-function mapSelectedLabels(selected, options) {
-  return (Array.isArray(selected) ? selected : [])
-    .map(sel => {
-      if (sel?.name) return sel.name;
-      if (typeof sel === 'number' && options?.[sel]?.name) return options[sel].name;
-      if (typeof sel === 'string') return sel;
-      return String(sel);
-    })
-    .filter(Boolean);
-}
-
-function extractOrderNumberFromCorrelation(corr) {
-  if (!corr) return null;
-  const s = String(corr);
-  const m = s.match(/(?:confirm:)?(\d+)/i); 
-  return m ? m[1] : null;
+async function initStore() {
+  if (!mongoStore) {
+    mongoStore = new MongoStore({ mongoose });
+  }
+  return mongoStore;
 }
 
 /* -------------------------------- getClient -------------------------------- */
-function getClient(clientId) {
+async function getClient(clientId) {
   if (clients.has(clientId)) return clients.get(clientId);
 
   console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
 
-const client = new Client({
-  puppeteer: {
-    headless: true,
-   executablePath: process.env.CHROMIUM_PATH || '/usr/bin/google-chrome',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process', 
-      '--disable-gpu'
-    ]
-  },
-  authStrategy: new LocalAuth({ clientId })
-});
+  const store = await initStore();
 
+  const client = new Client({
+    puppeteer: {
+      headless: true,
+      executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu'
+      ]
+    },
+    authStrategy: new LocalAuth({
+      clientId,
+      store,   // ✅ Mongo-backed session store (no QR after restart)
+    }),
+  });
 
   /* --------------------------------- QR Code -------------------------------- */
   let qrLogged = false;
@@ -107,9 +89,10 @@ const client = new Client({
     console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
   });
 
-client.on('authenticated', () => {
-  console.log(`🔐 Authenticated: ${clientId}`);
-});
+  client.on('authenticated', () => {
+    console.log(`🔐 Authenticated: ${clientId}`);
+  });
+
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
     console.log(`✅ Client ready: ${clientId}`);
@@ -119,55 +102,51 @@ client.on('authenticated', () => {
     global.io?.to(clientId).emit('ready', { message: 'connected' });
 
     // --- Sync chats & messages ---
-  try {
-    console.log(`🔄 Syncing chats for ${clientId}...`);
-    const chats = await client.getChats();
+    try {
+      console.log(`🔄 Syncing chats for ${clientId}...`);
+      const chats = await client.getChats();
 
-    for (const chat of chats) {
-      // Save chat (skip if already exists)
-      await Chat.updateOne(
-        { clientId, chatId: chat.id._serialized },
-        {
-          $set: {
-            clientId,
-            chatId: chat.id._serialized,
-            name: chat.name,
-            isGroup: chat.isGroup,
-            timestamp: chat.timestamp || new Date(),
-          }
-        },
-        { upsert: true }
-      );
-
-      // Fetch last 200 messages per chat (you can increase)
-      const msgs = await chat.fetchMessages({ limit: 200 });
-
-      for (const msg of msgs) {
-        await Message.updateOne(
-          { clientId, messageId: msg.id._serialized },
+      for (const chat of chats) {
+        await Chat.updateOne(
+          { clientId, chatId: chat.id._serialized },
           {
-            $setOnInsert: {
+            $set: {
               clientId,
               chatId: chat.id._serialized,
-              messageId: msg.id._serialized,
-              from: msg.from,
-              to: msg.to,
-              type: msg.type,
-              body: msg.body,
-              timestamp: msg.timestamp,
-              mediaUrl: null, // you can add media download logic if needed
+              name: chat.name,
+              isGroup: chat.isGroup,
+              timestamp: chat.timestamp || new Date(),
             }
           },
           { upsert: true }
         );
+
+        const msgs = await chat.fetchMessages({ limit: 200 });
+        for (const msg of msgs) {
+          await Message.updateOne(
+            { clientId, messageId: msg.id._serialized },
+            {
+              $setOnInsert: {
+                clientId,
+                chatId: chat.id._serialized,
+                messageId: msg.id._serialized,
+                from: msg.from,
+                to: msg.to,
+                type: msg.type,
+                body: msg.body,
+                timestamp: msg.timestamp,
+                mediaUrl: null,
+              }
+            },
+            { upsert: true }
+          );
+        }
       }
+
+      console.log(`✅ Chats & messages synced for ${clientId}`);
+    } catch (err) {
+      console.error(`❌ Error syncing for ${clientId}:`, err.message);
     }
-
-    console.log(`✅ Chats & messages synced for ${clientId}`);
-  } catch (err) {
-    console.error(`❌ Error syncing for ${clientId}:`, err.message);
-  }
-
 
     try {
       const page = client.pupPage;
@@ -251,54 +230,43 @@ client.on('authenticated', () => {
           sent = await client.sendMessage(chatId, media, { caption: payload.message || '' });
 
         } else {
-         let text;
-
-  if (payload?.message) {
-    // Use provided message
-    text = payload.message;
-  } else {
-    // No message → auto-generate OTP and save in DB
-    const { generateOtp } = await import('../services/otpService.js');
-    const otp = await generateOtp(chatId.replace('@c.us', ''), clientId);
-    text = `🔑 Your OTP is: ${otp}`;
-  }
-
-  sent = await client.sendMessage(chatId, text);
+          let text;
+          if (payload?.message) {
+            text = payload.message;
+          } else {
+            const { generateOtp } = await import('../services/otpService.js');
+            const otp = await generateOtp(chatId.replace('@c.us', ''), clientId);
+            text = `🔑 Your OTP is: ${otp}`;
+          }
+          sent = await client.sendMessage(chatId, text);
         }
 
         console.log(`✅ queued item sent type=${type} to=${to}`);
-
       } catch (err) {
         console.error(`⛔ queued send failed to ${to}:`, err.message);
       }
     }
   });
 
-
   client.on('auth_failure', async (msg) => {
-  console.error(`❌ Auth failure for ${clientId}: ${msg}`);
-  readyFlags.set(clientId, false);
-  sessionStatus.set(clientId, 'disconnected');
+    console.error(`❌ Auth failure for ${clientId}: ${msg}`);
+    readyFlags.set(clientId, false);
+    sessionStatus.set(clientId, 'disconnected');
 
-  await ClientModel.updateOne(
-    { clientId },
-    { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'AUTH_FAILURE' } }
-  ).catch(() => null);
+    await ClientModel.updateOne(
+      { clientId },
+      { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'AUTH_FAILURE' } }
+    ).catch(() => null);
 
-  // force QR regeneration
-  try { await client.destroy(); } catch {}
-  clients.delete(clientId);
-  qrCodes.delete(clientId);
-  readyFlags.delete(clientId);
-  sessionStatus.delete(clientId);
+    try { await client.destroy(); } catch {}
+    clients.delete(clientId);
+    qrCodes.delete(clientId);
+    readyFlags.delete(clientId);
+    sessionStatus.delete(clientId);
 
-  // auto re-init → new QR will be emitted
-  getClient(clientId);
-});
+    getClient(clientId); // auto re-init
+  });
 
-
-
-  /* ------------------------------- New Message ------------------------------ */
   client.on('message', async (msg) => {
     try {
       const messageData = {
@@ -330,7 +298,6 @@ client.on('authenticated', () => {
     }
   });
 
-  /* --------------------------- Poll vote --------------------------- */
   client.on('vote_update', async (vote) => {
     try {
       const parentIdRaw = extractParentMessageIdFromVote(vote);
@@ -401,7 +368,6 @@ client.on('authenticated', () => {
     }
   });
 
-  /* ------------------------------- Disconnected ----------------------------- */
   client.on('disconnected', async (reason) => {
     console.warn(`🔌 Disconnected (${clientId}): ${reason}`);
     readyFlags.set(clientId, false);
