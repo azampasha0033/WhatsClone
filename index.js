@@ -87,7 +87,17 @@ app.get('/chats/:clientId', async (req, res) => {
     }
 
     // Fetch chats from the WhatsApp client (you may need to tweak this based on your WhatsApp client structure)
-    const chats = await client.getChats();  // This fetches all chats using the `whatsapp-web.js` client
+    // const chats = await client.getChats();  
+
+    async function safeGetChats(client, clientId) {
+  if (!client || !client.pupPage || client.pupPage.isClosed()) {
+    throw new Error(`Client ${clientId}: Puppeteer page is closed`);
+  }
+  return client.getChats();
+}
+
+const chats = await safeGetChats(client, clientId);
+
 
      global.io?.to(clientId).emit('chats-list', chats.map(chat => ({
       id: chat.id._serialized,
@@ -130,14 +140,18 @@ app.get('/messages/:clientId/:chatId', async (req, res) => {
       return res.status(404).json({ error: `Client with ID ${clientId} not found.` });
     }
 
-    // Fetch the chat by its ID
-    const chat = await client.getChatById(chatId);
-    if (!chat) {
-      return res.status(404).json({ error: `Chat with ID ${chatId} not found.` });
-    }
+ if (!client || !client.pupPage || client.pupPage.isClosed()) {
+  throw new Error(`Client ${clientId}: Puppeteer page is closed`);
+}
 
-    // Fetch messages (optionally limit) and sort by timestamp
-    const rawMessages = await chat.fetchMessages({ limit }); // works even if limit isn't used by your lib
+const chat = await client.getChatById(chatId);
+if (!chat) {
+  return res.status(404).json({ error: `Chat with ID ${chatId} not found.` });
+}
+
+const rawMessages = await chat.fetchMessages({ limit });
+
+
     rawMessages.sort((a, b) => {
       const ta = a.timestamp || 0; // seconds since epoch
       const tb = b.timestamp || 0;

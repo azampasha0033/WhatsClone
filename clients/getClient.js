@@ -113,36 +113,48 @@ export function getClient(clientId) {
   });
 
   /* ---------------------------------- Ready --------------------------------- */
-  client.on('ready', async () => {
-    console.log(`✅ Client ready: ${clientId}`);
-    qrCodes.set(clientId, null);
-    readyFlags.set(clientId, true);
-    global.io?.to(clientId).emit('ready', { message: 'connected' });
+client.on('ready', async () => {
+  console.log(`✅ Client ready: ${clientId}`);
+  qrCodes.set(clientId, null);
+  readyFlags.set(clientId, true);
+  global.io?.to(clientId).emit('ready', { message: 'connected' });
 
-    // ensure page console piping after ready (best-effort)
-    try {
-      const page = client.pupPage;
-      if (page && !page.__consoleHooked) {
-        page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
-        page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
-        page.on('pageerror', (e) => console.warn('📄[WA] PAGEEXCEPTION', e?.message || e));
-        page.__consoleHooked = true;
-        console.log('🔌 ready: page console piping enabled');
-      }
-    } catch (e) {
-      console.warn('⚠️ ready: console pipe failed:', e?.message);
+  try {
+    const page = client.pupPage;
+    if (page && !page.__consoleHooked) {
+      page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
+      page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
+      page.on('pageerror', (e) => console.warn('📄[WA] PAGEEXCEPTION', e?.message || e));
+
+      // 🆕 detect unexpected crash
+      page.on('close', async () => {
+        console.warn(`⚠️ Puppeteer page closed for ${clientId}`);
+        readyFlags.set(clientId, false);
+
+        await ClientModel.updateOne(
+          { clientId },
+          { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'PAGE_CLOSED' } }
+        ).catch(() => null);
+
+        try { await client.destroy(); } catch {}
+        clients.delete(clientId);
+        qrCodes.delete(clientId);
+        readyFlags.delete(clientId);
+      });
+
+      page.__consoleHooked = true;
+      console.log('🔌 ready: page console piping enabled');
     }
+  } catch (e) {
+    console.warn('⚠️ ready: console pipe failed:', e?.message);
+  }
 
-    await ClientModel.updateOne(
-      { clientId },
-      {
-        $set: {
-          sessionStatus: 'connected',
-          lastConnectedAt: new Date()
-        }
-      }
-    ).catch((e) => console.warn('⚠️ ClientModel connected warn:', e?.message));
-    console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
+  // ✅ this part must always run, even if page is missing
+  await ClientModel.updateOne(
+    { clientId },
+    { $set: { sessionStatus: 'connected', lastConnectedAt: new Date() } }
+  ).catch((e) => console.warn('⚠️ ClientModel connected warn:', e?.message));
+  console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
 
     // === Process Queued Messages ===
     const queued = await MessageQueue.find({ clientId, status: 'pending' }).catch(() => []);
