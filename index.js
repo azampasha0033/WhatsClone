@@ -295,7 +295,6 @@ const startServer = async () => {
   });
 });
 
-
   server.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
   }).on('error', (err) => {

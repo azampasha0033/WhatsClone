@@ -74,14 +74,12 @@ export function getClient(clientId) {
     puppeteer: {
       headless: true,
       args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-extensions',
-        '--disable-gpu',
-        '--no-zygote',
-        '--single-process',
-        '--js-flags=--expose-gc',
+       '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--single-process'
       ],
     },
   });
