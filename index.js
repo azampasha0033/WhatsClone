@@ -100,9 +100,6 @@ async function safeGetClient(clientId) {
 /* -------------------------------------------------------------------------- */
 
 // ✅ Chats
-// ✅ Fix in index.js route /chats/:clientId
-
-
 app.get('/chats/:clientId', async (req, res) => {
   try {
     let { clientId } = req.params;
@@ -147,7 +144,6 @@ app.get('/chats/:clientId', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
-
 
 // ✅ Messages
 app.get('/messages/:clientId/:chatId', async (req, res) => {
@@ -230,7 +226,7 @@ app.get('/messages/:clientId/:chatId', async (req, res) => {
   }
 });
 
-// ✅ Status Endpoint with ngrok error protection
+// ✅ Status Endpoint
 app.get('/status/:clientId', (req, res) => {
   try {
     const clientId = req.params.clientId;
