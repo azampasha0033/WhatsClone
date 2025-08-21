@@ -68,7 +68,7 @@ function getClient(clientId) {
 const client = new Client({
   puppeteer: {
     headless: true,
-    executablePath: process.env.CHROMIUM_PATH || '/usr/bin/google-chrome',
+   executablePath: process.env.CHROMIUM_PATH || '/usr/bin/google-chrome',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',

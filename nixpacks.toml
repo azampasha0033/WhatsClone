@@ -1,0 +1,5 @@
+[phases.setup]
+aptPkgs = ["chromium"]
+
+[env]
+CHROMIUM_PATH = "/usr/bin/chromium"

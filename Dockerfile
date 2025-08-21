@@ -1,21 +1,44 @@
-# Use Node.js base image
+# Use Node.js LTS
 FROM node:18-slim
 
-# Install Chromium
-RUN apt-get update && apt-get install -y chromium
+# Install dependencies required for Chromium
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-common \
+    chromium-driver \
+    fonts-liberation \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libxkbcommon0 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libasound2 \
+    xdg-utils \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
-# Tell puppeteer/whatsapp-web.js where Chromium is
+# Set Chromium path for puppeteer
 ENV CHROMIUM_PATH=/usr/bin/chromium
 
-# Set working directory
+# Create app directory
 WORKDIR /app
 
-# Copy dependencies first (faster build)
+# Install app dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm install --production
 
-# Copy app code
+# Copy app source
 COPY . .
 
-# Start server
+# Expose port
+EXPOSE 8080
+
+# Start app
 CMD ["node", "index.js"]
