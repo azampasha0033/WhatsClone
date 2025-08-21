@@ -107,7 +107,7 @@ async function safeGetClient(clientId) {
 
 // ✅ Chats
 // index.js
-import { Chat } from './models/Chat.js';
+
 
 app.get('/chats/:clientId', async (req, res) => {
   try {
