@@ -6,15 +6,13 @@ import { MessageQueue } from '../db/messageQueue.js';
 import { SentMessage } from '../models/SentMessage.js';
 import pkg from 'whatsapp-web.js';
 import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
-
 import { requireActivePlanForClient } from '../middleware/requireActivePlanForClient.js';
 import { Subscription } from '../models/Subscription.js';
-
 
 const { Poll, MessageMedia } = pkg;
 const router = express.Router();
 
-/* helper: turn serialized WA id into short id (suffix) */
+/* helper: short msg id */
 function getShortMsgId(serialized) {
   if (!serialized) return null;
   const parts = String(serialized).split('_');
@@ -25,13 +23,13 @@ router.post('/', requireActivePlanForClient, async (req, res) => {
   const {
     clientId,
     to,
-    type,                    // "message" | "poll" (optional; inferred)
+    type,
     message,
     question,
     options,
     allowMultipleAnswers = false,
-    introText = '',          // optional text to send before a poll
-    attachment,              // base64 or URL
+    introText = '',
+    attachment,
     mimetype = 'application/octet-stream',
     filename = 'file',
     correlationId
@@ -39,7 +37,6 @@ router.post('/', requireActivePlanForClient, async (req, res) => {
 
   const apiKey = req.headers['x-api-key'] || req.headers['X-API-KEY'];
   if (!clientId || !to || !apiKey) {
-    console.log('⛔ send-message: missing fields', { clientId: !!clientId, to: !!to, hasApiKey: !!apiKey });
     return res.status(400).json({ error: 'Missing required fields: clientId, to, x-api-key' });
   }
 
@@ -53,23 +50,20 @@ router.post('/', requireActivePlanForClient, async (req, res) => {
       apiKey: cleanApiKey
     });
     if (!clientRecord) {
-      console.log('⛔ send-message: invalid apiKey/clientId');
       return res.status(403).json({ error: 'Invalid API Key or clientId' });
     }
 
     const client = getClient(cleanClientId);
-    const chatId = to.replace(/\D/g, '') + '@c.us';
+
+    // ✅ normalize chatId (strip +, spaces, etc.)
+    const rawTo = String(to).trim();
+    const chatId = rawTo.replace(/\D/g, '') + '@c.us';
 
     const isPoll = (type === 'poll') || (!!question && Array.isArray(options) && options.length > 0);
-    // How many WhatsApp sends will this request produce if sent now?
-    // - plain message: 1
-    // - media: 1
-    // - poll: 1 (+1 if introText is present)
     const intendedCount = isPoll ? (introText ? 2 : 1) : 1;
 
-    // Check subscription/quota FIRST (don’t consume here)
-    // We check on queue too (for better UX), and enforce again when the queue actually sends.
-    let subInfo = null;
+    // Quota
+    let subInfo;
     try {
       subInfo = await assertCanSendMessage(cleanClientId);
       if (subInfo.remaining < intendedCount) {
@@ -82,9 +76,8 @@ router.post('/', requireActivePlanForClient, async (req, res) => {
       return res.status(402).json({ ok: false, error: e.message });
     }
 
-    // Not ready → queue (don’t increment usage now; increment when actually sent)
+    // If client not ready → queue
     if (!client || !isClientReady(cleanClientId)) {
-      console.log(`🟠 send-message: client not ready, queuing (type=${isPoll ? 'poll' : (attachment ? 'media' : 'message')})`);
       const payload = isPoll
         ? { question, options, allowMultipleAnswers, introText, correlationId: correlationId || null }
         : { message, attachment, mimetype, filename, correlationId: correlationId || null };
@@ -95,7 +88,7 @@ router.post('/', requireActivePlanForClient, async (req, res) => {
         message: JSON.stringify(payload),
         type: isPoll ? 'poll' : (attachment ? 'media' : 'message'),
         status: 'pending'
-      }).catch((e) => console.warn('⚠️ MessageQueue.create warn:', e?.message));
+      }).catch((e) => console.warn('⚠️ queue warn:', e?.message));
 
       return res.status(202).json({
         success: true,
@@ -104,128 +97,63 @@ router.post('/', requireActivePlanForClient, async (req, res) => {
       });
     }
 
-    // Client is ready → Send now (consume quota immediately after each successful send)
+    /* -------------------------- ACTUAL SEND -------------------------- */
     let sent;
     let consumed = 0;
 
-    if (isPoll) {
-      // 1) optional intro text BEFORE poll
-      if (introText && String(introText).trim().length > 0) {
-        const introMsg = await client.sendMessage(chatId, String(introText));
-        console.log('✉️ send-message: intro text sent →', introMsg?.id?._serialized);
+    try {
+      if (isPoll) {
+        // optional intro
+        if (introText && String(introText).trim()) {
+          const introMsg = await client.sendMessage(chatId, String(introText));
+          if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+          consumed++;
+        }
 
-        await SentMessage.create({
-          clientId: cleanClientId,
-          to: chatId,
-          type: 'message',
-          messageId: introMsg?.id?._serialized || null,
-          messageIdShort: getShortMsgId(introMsg?.id?._serialized || null),
-          payload: { message: String(introText), correlationId: correlationId || null },
-          correlationId: correlationId || null
-        }).catch((e) => console.warn('⚠️ SentMessage.create warn (intro):', e?.message));
+        const qRaw = String(question || 'Do you confirm your order?').trim();
+        const ops = (Array.isArray(options) && options.length ? options : ['✅ Yes', '❌ No']).map(o => String(o).trim());
+        const poll = new Poll(qRaw, ops, { allowMultipleAnswers: !!allowMultipleAnswers, allowResubmission: false });
 
-        // consume 1 for intro
+        sent = await client.sendMessage(chatId, poll);
         if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
-        consumed += 1;
+        consumed++;
+      }
+      else if (attachment) {
+        let media;
+        try {
+          if (String(attachment).startsWith('http')) {
+            media = await MessageMedia.fromUrl(attachment);
+          } else {
+            const base64 = String(attachment).includes(',') ? String(attachment).split(',')[1] : String(attachment);
+            media = new MessageMedia(mimetype, base64, filename);
+          }
+        } catch (e) {
+          return res.status(400).json({ error: 'Invalid attachment', details: e.message });
+        }
+        sent = await client.sendMessage(chatId, media, { caption: message || '' });
+        if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+        consumed++;
+      }
+      else {
+        sent = await client.sendMessage(chatId, message || '');
+        if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+        consumed++;
       }
 
-      // 2) the poll
-      const qRaw = String(question || 'Do you confirm your order?').trim();
-      const ops = (Array.isArray(options) && options.length ? options : ['✅ Yes', '❌ No'])
-        .map(o => String(o).trim());
-      const corr = correlationId || null;
-      const qWithId = corr ? `${qRaw} (ID:${corr})` : qRaw;
-
-      console.log('🧱 send-message: creating poll with', { q: qWithId, options: ops, allowMultipleAnswers });
-
-      const poll = new Poll(qWithId, ops, {
-        allowMultipleAnswers: !!allowMultipleAnswers,
-        allowResubmission: false
-      });
-
-      sent = await client.sendMessage(chatId, poll);
-      console.log('✉️ send-message: poll sent →', sent?.id?._serialized);
-
-      await SentMessage.create({
-        clientId: cleanClientId,
-        to: chatId,
-        type: 'poll',
-        messageId: sent?.id?._serialized || null,
-        messageIdShort: getShortMsgId(sent?.id?._serialized || null),
-        payload: { question: qWithId, options: ops, allowMultipleAnswers: !!allowMultipleAnswers, correlationId: corr },
-        correlationId: corr
-      }).catch((e) => console.warn('⚠️ SentMessage.create warn (poll):', e?.message));
-      console.log('💾 send-message: SentMessage stored with correlationId =', corr);
-
-      // consume 1 for poll
-      if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
-      consumed += 1;
-
-      await ClientModel.updateOne({ _id: clientRecord._id }, { $inc: { messagesCount: 1 * (introText ? 2 : 1) } })
-        .catch((e) => console.warn('⚠️ ClientModel messagesCount++ warn:', e?.message));
-
+      await ClientModel.updateOne({ _id: clientRecord._id }, { $inc: { messagesCount: consumed } }).catch(() => {});
       return res.status(200).json({
         success: true,
         messageId: sent?.id?._serialized || null,
         consumed,
         remaining: (subInfo.remaining - consumed)
       });
+    } catch (sendErr) {
+      console.error('❌ sendMessage failed:', sendErr);
+      return res.status(500).json({ error: 'Failed to send via WhatsApp: ' + sendErr.message });
     }
-
-    // Non-poll
-    if (attachment) {
-      let media;
-      if (String(attachment).startsWith('http')) {
-        media = await MessageMedia.fromUrl(attachment);
-      } else {
-        const base64 = String(attachment).includes(',') ? String(attachment).split(',')[1] : String(attachment);
-        media = new MessageMedia(mimetype, base64, filename);
-      }
-      sent = await client.sendMessage(chatId, media, { caption: message || '' });
-      console.log('✉️ send-message: media sent →', sent?.id?._serialized);
-
-      await SentMessage.create({
-        clientId: cleanClientId,
-        to: chatId,
-        type: 'media',
-        messageId: sent?.id?._serialized || null,
-        messageIdShort: getShortMsgId(sent?.id?._serialized || null),
-        payload: { message: message || '', attachment, mimetype, filename, correlationId: correlationId || null },
-        correlationId: correlationId || null
-      }).catch((e) => console.warn('⚠️ SentMessage.create warn:', e?.message));
-
-      if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
-      consumed += 1;
-    } else {
-      sent = await client.sendMessage(chatId, message);
-      console.log('✉️ send-message: text sent →', sent?.id?._serialized);
-
-      await SentMessage.create({
-        clientId: cleanClientId,
-        to: chatId,
-        type: 'message',
-        messageId: sent?.id?._serialized || null,
-        messageIdShort: getShortMsgId(sent?.id?._serialized || null),
-        payload: { message, correlationId: correlationId || null },
-        correlationId: correlationId || null
-      }).catch((e) => console.warn('⚠️ SentMessage.create warn:', e?.message));
-
-      if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
-      consumed += 1;
-    }
-
-    await ClientModel.updateOne({ _id: clientRecord._id }, { $inc: { messagesCount: 1 } })
-      .catch((e) => console.warn('⚠️ ClientModel messagesCount++ warn:', e?.message));
-
-    return res.status(200).json({
-      success: true,
-      messageId: sent?.id?._serialized || null,
-      consumed,
-      remaining: (subInfo.remaining - consumed)
-    });
   } catch (err) {
     console.error('⛔ send-message fatal error:', err);
-    return res.status(500).json({ error: 'Failed to send message: ' + err.message });
+    return res.status(500).json({ error: 'Internal error: ' + err.message });
   }
 });
 
