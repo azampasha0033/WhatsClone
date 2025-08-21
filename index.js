@@ -51,7 +51,7 @@ global.io = io;
 
 app.use(cors());
 app.use(express.json());
-app.use('/labels', labelRoute);
+app.use('/labels', labelsRouter);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
 
 // API routes
