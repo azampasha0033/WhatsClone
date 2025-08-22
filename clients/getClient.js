@@ -8,6 +8,8 @@ import { ClientModel } from '../db/clients.js';
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
 import { saveChat } from '../services/chatService.js';
+import { saveMessage } from '../services/messageService.js';
+
 
 import fs from 'fs';
 import path from 'path';
@@ -165,16 +167,25 @@ client.on('authenticated', async () => {
       console.warn('⚠️ ready: console pipe failed:', e?.message);
     }
 
- try {
+ // ✅ Single block to save chats + messages
+  try {
     const chats = await client.getChats();
     for (const chat of chats) {
       await saveChat(clientId, chat);
-    }
-    console.log(`💾 Saved ${chats.length} chats for client ${clientId}`);
-  } catch (err) {
-    console.error(`❌ Failed to fetch chats for ${clientId}:`, err.message);
-  }
 
+      try {
+        const messages = await chat.fetchMessages({ limit: 50 });
+        for (const msg of messages) {
+          await saveMessage(clientId, msg);
+        }
+      } catch (err) {
+        console.warn(`⚠️ Could not fetch messages for chat ${chat.id._serialized}:`, err.message);
+      }
+    }
+    console.log(`💾 Saved ${chats.length} chats (and recent messages) for client ${clientId}`);
+  } catch (err) {
+    console.error(`❌ Failed to fetch chats/messages for ${clientId}:`, err.message);
+  }
 
     await ClientModel.updateOne(
       { clientId },
@@ -249,6 +260,9 @@ client.on('authenticated', async () => {
   /* ------------------------------- New Message ------------------------------ */
   client.on('message', async (msg) => {
     try {
+
+       await saveMessage(clientId, msg);
+
       const messageData = {
         id: msg.id._serialized,
         from: msg.from,
@@ -276,6 +290,10 @@ client.on('authenticated', async () => {
     } catch (err) {
       console.error(`❌ Error in message handler for ${clientId}:`, err.message);
     }
+
+  
+
+
   });
 
   /* --------------------------- Poll vote --------------------------- */
