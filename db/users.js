@@ -7,42 +7,35 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
+      unique: true,     // unique already implies index
       lowercase: true,
-      trim: true,
-      index: true
+      trim: true
     },
 
-    // never return these by default
     passwordHash: { type: String, required: true, select: false },
 
-    // Phone verification (WhatsApp)
     phoneRaw:   { type: String, required: true, trim: true },
-    phoneE164:  { type: String, required: true, unique: true, index: true },
+    phoneE164:  { type: String, required: true, unique: true }, // unique implies index
     phoneVerified: { type: Boolean, default: false },
 
-    // Signup OTP (phone verification) — hidden by default
     otpHash:          { type: String, default: null, select: false },
     otpExpiresAt:     { type: Date,   default: null },
     otpAttemptCount:  { type: Number, default: 0, min: 0, max: 10 },
 
-    // 🔹 Password-reset OTP — hidden by default
     resetOtpHash:         { type: String, default: null, select: false },
     resetOtpExpiresAt:    { type: Date,   default: null },
     resetOtpAttemptCount: { type: Number, default: 0, min: 0, max: 10 },
 
-    // Tenant scoping / role
     clientId: { type: String, default: null, trim: true },
     role: { type: String, enum: ['owner', 'admin', 'user'], default: 'user' }
   },
   { timestamps: true }
 );
 
-// Helpful indexes
-userSchema.index({ email: 1 }, { unique: true });
-userSchema.index({ phoneE164: 1 }, { unique: true });
+// ❌ Remove duplicate manual indexes
+// userSchema.index({ email: 1 }, { unique: true });
+// userSchema.index({ phoneE164: 1 }, { unique: true });
 
-// Always normalize phone/email on set (extra safety)
 userSchema.pre('save', function (next) {
   if (this.isModified('email') && this.email) {
     this.email = String(this.email).trim().toLowerCase();
@@ -56,7 +49,6 @@ userSchema.pre('save', function (next) {
   next();
 });
 
-// Clean JSON output
 userSchema.set('toJSON', {
   transform: (_doc, ret) => {
     delete ret.passwordHash;
