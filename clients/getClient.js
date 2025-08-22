@@ -7,6 +7,7 @@ import { MessageQueue } from '../db/messageQueue.js';
 import { ClientModel } from '../db/clients.js';
 import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
+import { saveChat } from '../services/chatService.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -106,9 +107,24 @@ function getClient(clientId) {
     //console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
   });
 
-  client.on('authenticated', () => {
-    //console.log(`🔐 Authenticated: ${clientId}`);
-  });
+// 🔄 Force chat sync if client is already connected
+client.on('authenticated', async () => {
+  try {
+    // give it a short delay so WA session is stable
+    setTimeout(async () => {
+      if (readyFlags.get(clientId)) {
+        const chats = await client.getChats();
+        for (const chat of chats) {
+          await saveChat(clientId, chat);
+        }
+        console.log(`🔄 Forced sync for already-connected client ${clientId}`);
+      }
+    }, 3000);
+  } catch (err) {
+    console.error(`❌ Forced sync failed for ${clientId}:`, err.message);
+  }
+});
+
 
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
@@ -148,6 +164,17 @@ function getClient(clientId) {
     } catch (e) {
       console.warn('⚠️ ready: console pipe failed:', e?.message);
     }
+
+ try {
+    const chats = await client.getChats();
+    for (const chat of chats) {
+      await saveChat(clientId, chat);
+    }
+    console.log(`💾 Saved ${chats.length} chats for client ${clientId}`);
+  } catch (err) {
+    console.error(`❌ Failed to fetch chats for ${clientId}:`, err.message);
+  }
+
 
     await ClientModel.updateOne(
       { clientId },
@@ -211,6 +238,13 @@ function getClient(clientId) {
       }
     }
   });
+
+  /* ------------------------------- Chat Update ------------------------------ */
+
+  client.on('chat_update', async (chat) => {
+  await saveChat(clientId, chat);
+});
+
 
   /* ------------------------------- New Message ------------------------------ */
   client.on('message', async (msg) => {
