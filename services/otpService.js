@@ -63,7 +63,7 @@ export async function sendOtp(clientId, phone, templateText) {
   );
 
   // Prepare template message
-  const messageText = applyOtpTemplate(templateText, otp, expiryMinutes); // <-- Proper handling
+  const messageText = applyOtpTemplate(templateText, otp, expiryMinutes);
 
   // Send OTP via WhatsApp
   const chatId = phone.replace(/\D/g, '') + '@c.us';
@@ -75,8 +75,10 @@ export async function sendOtp(clientId, phone, templateText) {
   // Increment message count in client's table
   await ClientModel.updateOne(
     { clientId },
-    { $inc: { messageCount: 1 } }  // Increment the message count in DB
-  );
+    { $inc: { messagesCount: 1 } }
+  ).catch((err) => {
+    console.error('Error updating message count:', err.message);
+  });
 
   return {
     success: true,

@@ -3,6 +3,7 @@ import { sendOtp, verifyOtp, resendOtp } from '../services/otpService.js';
 
 const router = express.Router();
 
+// Route to send OTP
 router.post('/send', async (req, res) => {
   try {
     const { clientId, phone, templateText } = req.body;
@@ -15,6 +16,7 @@ router.post('/send', async (req, res) => {
   }
 });
 
+// Route to verify OTP
 router.post('/verify', async (req, res) => {
   try {
     const { clientId, phone, otp } = req.body;
@@ -27,6 +29,7 @@ router.post('/verify', async (req, res) => {
   }
 });
 
+// Route to resend OTP
 router.post('/resend', async (req, res) => {
   try {
     const { clientId, phone, templateText } = req.body;
