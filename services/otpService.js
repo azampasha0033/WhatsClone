@@ -3,6 +3,12 @@ import { Otp } from '../models/Otp.js';
 import { getClient, sessionStatus } from '../clients/getClient.js';
 import { assertCanSendMessage, incrementUsage } from './quota.js';
 import { ClientModel } from '../db/clients.js';
+import crypto from 'crypto';
+
+// Helper to generate a random API key
+function generateApiKey() {
+  return crypto.randomBytes(32).toString('hex'); // 64 character API key
+}
 
 /* ----------------------- Helper: Generate OTP ----------------------- */
 function generateOtp() {
@@ -21,7 +27,10 @@ function applyOtpTemplate(templateText, otp, expiryMinutes = 5) {
 }
 
 /* ----------------------- SEND OTP ----------------------- */
-export async function sendOtp(clientId, phone, templateText) {
+export async function sendOtp(clientId, phone, apiKey, templateText) {
+  // Validate API key
+  await validateApiKey(clientId, apiKey);
+
   let client = getClient(clientId);
   if (!client) throw new Error('WhatsApp client not found');
 
@@ -41,7 +50,7 @@ export async function sendOtp(clientId, phone, templateText) {
     });
   }
 
-  // 🔹 Check subscription & quota before sending
+  // Check subscription & quota before sending
   const { sub } = await assertCanSendMessage(clientId);
 
   // Generate OTP
@@ -69,7 +78,7 @@ export async function sendOtp(clientId, phone, templateText) {
   const chatId = phone.replace(/\D/g, '') + '@c.us';
   await client.sendMessage(chatId, messageText);
 
-  // 🔹 Increment usage for subscription
+  // Increment usage for subscription
   await incrementUsage(sub._id, 1);
 
   // Increment message count in client's table
@@ -89,7 +98,10 @@ export async function sendOtp(clientId, phone, templateText) {
 }
 
 /* ----------------------- VERIFY OTP ----------------------- */
-export async function verifyOtp(clientId, phone, otp) {
+export async function verifyOtp(clientId, phone, otp, apiKey) {
+  // Validate API key
+  await validateApiKey(clientId, apiKey);
+
   const record = await Otp.findOne({ clientId, phone });
 
   if (!record) throw new Error('No OTP generated for this phone');
@@ -111,6 +123,34 @@ export async function verifyOtp(clientId, phone, otp) {
 }
 
 /* ----------------------- RESEND OTP ----------------------- */
-export async function resendOtp(clientId, phone, templateText) {
-  return sendOtp(clientId, phone, templateText);
+export async function resendOtp(clientId, phone, apiKey, templateText) {
+  // Validate API key
+  await validateApiKey(clientId, apiKey);
+
+  return sendOtp(clientId, phone, apiKey, templateText);
+}
+
+/* ----------------------- Validate API Key ----------------------- */
+async function validateApiKey(clientId, apiKey) {
+  const client = await ClientModel.findOne({ clientId });
+  if (!client || client.apiKey !== apiKey) {
+    throw new Error('Invalid API key');
+  }
+}
+
+/* ----------------------- Regenerate API Key ----------------------- */
+export async function regenerateApiKey(clientId, apiKey) {
+  // Validate the API key
+  await validateApiKey(clientId, apiKey);
+
+  // Generate new API key
+  const newApiKey = generateApiKey();
+
+  // Update the client with the new API key
+  await ClientModel.updateOne(
+    { clientId },
+    { $set: { apiKey: newApiKey } }
+  );
+
+  return { success: true, newApiKey };
 }
