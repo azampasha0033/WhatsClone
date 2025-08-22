@@ -18,8 +18,9 @@ function generateOtp() {
 /* ----------------------- Helper: Apply Template --------------------- */
 function applyOtpTemplate(templateText, otp, expiryMinutes = 5) {
   if (!templateText) {
-    templateText = 'Your OTP is {{otp_code}} (expires in {{expiry_minutes}} minutes).';
+    templateText = '🔐 Your verification code is: {{otp_code}} This code will expire in {{expiry_minutes}} minutes.';
   }
+
 
   return templateText
     .replace('{{otp_code}}', otp)
