@@ -185,28 +185,6 @@ router.post('/signup', async (req, res) => {
       clientId: otpSenderClientId
     });
 
-
- let userclient = getClient(otpSenderClientId);
-  if (!userclient) throw new Error('WhatsApp client not found');
-
-  // If client is not yet connected → wait for it
-  if (sessionStatus.get(userclient) !== 'connected') {
-    console.log(`⚠️ Client ${userclient} not connected, waiting for re-authentication...`);
-
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Client reconnection timeout')), 20000);
-
-      client.once('ready', () => {
-        clearTimeout(timeout);
-        sessionStatus.set(userclient, 'connected');
-        console.log(`✅ Client ${userclient} reconnected & ready`);
-        resolve();
-      });
-    });
-  }
-
-
-
     const sendResult = await sendOtpViaWhatsApp({ clientId: otpSenderClientId, phoneE164, otp });
 
     return res.status(201).json({
