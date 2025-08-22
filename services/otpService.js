@@ -17,14 +17,34 @@ function applyOtpTemplate(templateText = 'Your OTP is {{otp_code}} (expires in {
 
 /* ----------------------- SEND OTP ----------------------- */
 export async function sendOtp(clientId, phone, templateText) {
-  // Check if client is connected
-  if (sessionStatus.get(clientId) !== 'connected') {
-    throw new Error('Client not connected to WhatsApp');
+  let client = getClient(clientId);
+
+  if (!client) {
+    throw new Error('WhatsApp client not found');
   }
 
-  // Get client
-  const client = getClient(clientId);
-  if (!client) throw new Error('WhatsApp client not found');
+  // If not connected, try to re-initialize the client
+  if (sessionStatus.get(clientId) !== 'connected') {
+    console.log(`⚠️ Client ${clientId} not connected, trying to re-authenticate...`);
+
+    try {
+      await client.initialize(); // triggers QR/session restore
+    } catch (err) {
+      throw new Error(`Failed to reinitialize WhatsApp client: ${err.message}`);
+    }
+
+    // Wait for "ready" event or timeout
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Client reconnection timeout')), 15000); // 15s
+
+      client.once('ready', () => {
+        clearTimeout(timeout);
+        sessionStatus.set(clientId, 'connected');
+        console.log(`✅ Client ${clientId} reconnected`);
+        resolve();
+      });
+    });
+  }
 
   // Generate OTP
   const otp = generateOtp();
@@ -37,7 +57,7 @@ export async function sendOtp(clientId, phone, templateText) {
     { clientId, phone },
     {
       otpHash,
-      otpExpiresAt: expiry,   // 🔹 make sure same field everywhere
+      otpExpiresAt: expiry,
       attempts: 0,
       verified: false
     },
@@ -61,6 +81,7 @@ export async function sendOtp(clientId, phone, templateText) {
     otpSent: true
   };
 }
+
 
 /* ----------------------- VERIFY OTP ----------------------- */
 export async function verifyOtp(clientId, phone, otp) {
