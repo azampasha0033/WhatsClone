@@ -25,6 +25,10 @@ const sessionStatus = new Map();   // ✅ Added
 
 const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
 
+if (!fs.existsSync(sessionsPath)) {
+  console.log('⚠️ Session folder missing → Railway wiped storage');
+}
+
 /* ------------------------------ Helper funcs ------------------------------ */
 function getShortMsgId(serialized) {
   if (!serialized) return null;
@@ -93,7 +97,7 @@ function getClient(clientId) {
     readyFlags.set(clientId, false);
 
     if (!qrLogged) {
-      //console.log(`📸 QR received for ${clientId}`);
+      console.log(`📸 QR received for ${clientId}`);
       qrLogged = true;
     }
 
@@ -106,7 +110,7 @@ function getClient(clientId) {
       { clientId },
       { $set: { sessionStatus: 'pending' } }
     ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
-    //console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
+    console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
   });
 
 // 🔄 Force chat sync if client is already connected
@@ -130,7 +134,7 @@ client.on('authenticated', async () => {
 
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
-   // console.log(`✅ Client ready: ${clientId}`);
+    console.log(`✅ Client ready: ${clientId}`);
     qrCodes.set(clientId, null);
     readyFlags.set(clientId, true);
     sessionStatus.set(clientId, 'connected');
@@ -161,7 +165,7 @@ client.on('authenticated', async () => {
         });
 
         page.__consoleHooked = true;
-        //console.log('🔌 ready: page console piping enabled');
+        console.log('🔌 ready: page console piping enabled');
       }
     } catch (e) {
       console.warn('⚠️ ready: console pipe failed:', e?.message);
@@ -191,11 +195,11 @@ client.on('authenticated', async () => {
       { clientId },
       { $set: { sessionStatus: 'connected', lastConnectedAt: new Date() } }
     ).catch((e) => console.warn('⚠️ ClientModel connected warn:', e?.message));
-    //console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
+    console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
 
     // === Process Queued Messages ===
     const queued = await MessageQueue.find({ clientId, status: 'pending' }).catch(() => []);
-    //console.log(`📮 queued count for ${clientId}: ${queued.length}`);
+    console.log(`📮 queued count for ${clientId}: ${queued.length}`);
 
     for (const { to, message, _id, type } of queued) {
       try {
@@ -222,7 +226,7 @@ client.on('authenticated', async () => {
           });
 
           sent = await client.sendMessage(chatId, poll);
-          //console.log('✉️ poll sent →', sent?.id?._serialized);
+          console.log('✉️ poll sent →', sent?.id?._serialized);
 
         } else if (payload?.attachment) {
           let media;
@@ -242,7 +246,7 @@ client.on('authenticated', async () => {
           sent = await client.sendMessage(chatId, text);
         }
 
-        //console.log(`✅ queued item sent type=${type} to=${to}`);
+        console.log(`✅ queued item sent type=${type} to=${to}`);
 
       } catch (err) {
         console.error(`⛔ queued send failed to ${to}:`, err.message);
@@ -361,7 +365,7 @@ client.on('authenticated', async () => {
         voter: voterWid || null
       });
 
-     // console.log('✅ vote_update recorded →', { orderNumber, labels, voter: voterWid || '' });
+      console.log('✅ vote_update recorded →', { orderNumber, labels, voter: voterWid || '' });
     } catch (e) {
       console.error('❌ vote_update handler error:', e?.message);
     }
