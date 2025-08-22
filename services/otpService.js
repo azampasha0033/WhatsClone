@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { Otp } from '../models/Otp.js';
 import { getClient, sessionStatus } from '../clients/getClient.js';
 import { assertCanSendMessage, incrementUsage } from './quota.js';
+import { ClientModel } from '../db/clients.js';
 
 /* ----------------------- Helper: Generate OTP ----------------------- */
 function generateOtp() {
@@ -9,13 +10,8 @@ function generateOtp() {
 }
 
 /* ----------------------- Helper: Apply Template --------------------- */
-function applyOtpTemplate(
-  templateText,  // Remove default value here
-  otp,
-  expiryMinutes = 5
-) {
+function applyOtpTemplate(templateText, otp, expiryMinutes = 5) {
   if (!templateText) {
-    // If no templateText is passed, use the default one
     templateText = 'Your OTP is {{otp_code}} (expires in {{expiry_minutes}} minutes).';
   }
 
@@ -23,7 +19,6 @@ function applyOtpTemplate(
     .replace('{{otp_code}}', otp)
     .replace('{{expiry_minutes}}', expiryMinutes.toString());
 }
-
 
 /* ----------------------- SEND OTP ----------------------- */
 export async function sendOtp(clientId, phone, templateText) {
@@ -77,6 +72,12 @@ export async function sendOtp(clientId, phone, templateText) {
   // 🔹 Increment usage for subscription
   await incrementUsage(sub._id, 1);
 
+  // Increment message count in client's table
+  await ClientModel.updateOne(
+    { clientId },
+    { $inc: { messageCount: 1 } }  // Increment the message count in DB
+  );
+
   return {
     success: true,
     phone,
@@ -84,7 +85,6 @@ export async function sendOtp(clientId, phone, templateText) {
     otpSent: true
   };
 }
-
 
 /* ----------------------- VERIFY OTP ----------------------- */
 export async function verifyOtp(clientId, phone, otp) {

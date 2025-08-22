@@ -5,10 +5,10 @@ const router = express.Router();
 
 router.post('/send', async (req, res) => {
   try {
-    const { clientId, phone } = req.body;
+    const { clientId, phone, templateText } = req.body;
     if (!clientId || !phone) return res.status(400).json({ error: 'clientId and phone required' });
 
-    const result = await sendOtp(clientId, phone);
+    const result = await sendOtp(clientId, phone, templateText);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -29,10 +29,10 @@ router.post('/verify', async (req, res) => {
 
 router.post('/resend', async (req, res) => {
   try {
-    const { clientId, phone } = req.body;
+    const { clientId, phone, templateText } = req.body;
     if (!clientId || !phone) return res.status(400).json({ error: 'clientId and phone required' });
 
-    const result = await resendOtp(clientId, phone);
+    const result = await resendOtp(clientId, phone, templateText);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
