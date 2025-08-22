@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Otp } from '../models/Otp.js';
 import { getClient, sessionStatus } from '../clients/getClient.js';
-import { assertCanSendMessage, incrementUsage } from './quota.js';  // <-- add assertCanSendMessage
+import { assertCanSendMessage, incrementUsage } from './quota.js';
 
 /* ----------------------- Helper: Generate OTP ----------------------- */
 function generateOtp() {
@@ -21,26 +21,21 @@ function applyOtpTemplate(
 
 /* ----------------------- SEND OTP ----------------------- */
 export async function sendOtp(clientId, phone, templateText) {
+  // Always try to get/reinit client
   let client = getClient(clientId);
   if (!client) throw new Error('WhatsApp client not found');
 
-  // If not connected, try to re-initialize the client
+  // If client is not yet connected → wait for it
   if (sessionStatus.get(clientId) !== 'connected') {
-    console.log(`⚠️ Client ${clientId} not connected, trying to re-authenticate...`);
-
-    try {
-      await client.initialize();
-    } catch (err) {
-      throw new Error(`Failed to reinitialize WhatsApp client: ${err.message}`);
-    }
+    console.log(`⚠️ Client ${clientId} not connected, waiting for re-authentication...`);
 
     await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Client reconnection timeout')), 15000);
+      const timeout = setTimeout(() => reject(new Error('Client reconnection timeout')), 20000);
 
       client.once('ready', () => {
         clearTimeout(timeout);
         sessionStatus.set(clientId, 'connected');
-        console.log(`✅ Client ${clientId} reconnected`);
+        console.log(`✅ Client ${clientId} reconnected & ready`);
         resolve();
       });
     });
@@ -84,8 +79,6 @@ export async function sendOtp(clientId, phone, templateText) {
     otpSent: true
   };
 }
-
-
 
 /* ----------------------- VERIFY OTP ----------------------- */
 export async function verifyOtp(clientId, phone, otp) {
