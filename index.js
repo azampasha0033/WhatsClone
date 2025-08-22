@@ -54,7 +54,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/labels', labelRoute);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
-app.use('/api/otp', otpRoute);
+
 // API routes
 app.use("/upload", uploadRouter);
 
@@ -69,7 +69,7 @@ app.use('/send-message', requireActivePlanForClient, sendMessageRoute);
 app.use('/send-confirmation', sendConfirmationRoute);
 app.use('/register-client', registerClientRoute);
 app.use('/send-poll-message', sendPollMessageRoute);
-
+app.use('/api/otp', otpRoute);
 const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
 
 if (!fs.existsSync(sessionsPath)) {

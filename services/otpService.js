@@ -9,7 +9,7 @@ function generateOtp() {
 }
 
 /* ----------------------- Helper: Apply Template --------------------- */
-function applyOtpTemplate(templateText, otp, expiryMinutes = 5) {
+function applyOtpTemplate(templateText = 'Your OTP is {{otp_code}} (expires in {{expiry_minutes}} minutes).', otp, expiryMinutes = 5) {
   return templateText
     .replace('{{otp_code}}', otp)
     .replace('{{expiry_minutes}}', expiryMinutes.toString());
@@ -37,7 +37,7 @@ export async function sendOtp(clientId, phone, templateText) {
     { clientId, phone },
     {
       otpHash,
-      otpExpiresAt: expiry,
+      otpExpiresAt: expiry,   // 🔹 make sure same field everywhere
       attempts: 0,
       verified: false
     },
