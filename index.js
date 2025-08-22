@@ -25,6 +25,7 @@ import subscriptionsStatusRoute from './routes/subscriptionsStatus.js';
 import { requireActivePlanForClient } from './middleware/requireActivePlanForClient.js';
 import getApiKeyRoute from './routes/getApiKey.js';
 import uploadRouter from "./routes/upload.js";
+import otpRoute from './routes/otp.js';
 import path from 'path';
 // index.js
 import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
@@ -53,7 +54,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/labels', labelRoute);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
-
+app.use('/api/otp', otpRoute);
 // API routes
 app.use("/upload", uploadRouter);
 
