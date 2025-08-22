@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { UserModel } from '../db/users.js';
 import { ClientModel } from '../db/clients.js';
-import { getClient, isClientReady } from '../clients/getClient.js';
+import { getClient, isClientReady,sessionStatus } from '../clients/getClient.js';
 
 // ⚠️ Use the same MessageQueue model path you already use elsewhere
 // If your file is db/messageQueue.js keep this import; if it's db/pendingMessages.js then change accordingly.
