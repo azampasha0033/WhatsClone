@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Otp } from '../models/Otp.js';
 import { getClient, sessionStatus } from '../clients/getClient.js';
-import { incrementUsage } from './quota.js';
+import { assertCanSendMessage, incrementUsage } from './quota.js';  // <-- add assertCanSendMessage
 
 /* ----------------------- Helper: Generate OTP ----------------------- */
 function generateOtp() {
@@ -9,7 +9,11 @@ function generateOtp() {
 }
 
 /* ----------------------- Helper: Apply Template --------------------- */
-function applyOtpTemplate(templateText = 'Your OTP is {{otp_code}} (expires in {{expiry_minutes}} minutes).', otp, expiryMinutes = 5) {
+function applyOtpTemplate(
+  templateText = 'Your OTP is {{otp_code}} (expires in {{expiry_minutes}} minutes).',
+  otp,
+  expiryMinutes = 5
+) {
   return templateText
     .replace('{{otp_code}}', otp)
     .replace('{{expiry_minutes}}', expiryMinutes.toString());
@@ -18,24 +22,20 @@ function applyOtpTemplate(templateText = 'Your OTP is {{otp_code}} (expires in {
 /* ----------------------- SEND OTP ----------------------- */
 export async function sendOtp(clientId, phone, templateText) {
   let client = getClient(clientId);
-
-  if (!client) {
-    throw new Error('WhatsApp client not found');
-  }
+  if (!client) throw new Error('WhatsApp client not found');
 
   // If not connected, try to re-initialize the client
   if (sessionStatus.get(clientId) !== 'connected') {
     console.log(`⚠️ Client ${clientId} not connected, trying to re-authenticate...`);
 
     try {
-      await client.initialize(); // triggers QR/session restore
+      await client.initialize();
     } catch (err) {
       throw new Error(`Failed to reinitialize WhatsApp client: ${err.message}`);
     }
 
-    // Wait for "ready" event or timeout
     await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Client reconnection timeout')), 15000); // 15s
+      const timeout = setTimeout(() => reject(new Error('Client reconnection timeout')), 15000);
 
       client.once('ready', () => {
         clearTimeout(timeout);
@@ -45,6 +45,9 @@ export async function sendOtp(clientId, phone, templateText) {
       });
     });
   }
+
+  // 🔹 Check subscription & quota before sending
+  const { sub } = await assertCanSendMessage(clientId);
 
   // Generate OTP
   const otp = generateOtp();
@@ -64,15 +67,15 @@ export async function sendOtp(clientId, phone, templateText) {
     { upsert: true }
   );
 
-  // Replace placeholder in template
+  // Prepare template message
   const messageText = applyOtpTemplate(templateText, otp, expiryMinutes);
 
   // Send OTP via WhatsApp
   const chatId = phone.replace(/\D/g, '') + '@c.us';
   await client.sendMessage(chatId, messageText);
 
-  // Increment usage (quota)
-  await incrementUsage(clientId, 'messages');
+  // 🔹 Increment usage for subscription
+  await incrementUsage(sub._id, 1);
 
   return {
     success: true,
@@ -81,6 +84,7 @@ export async function sendOtp(clientId, phone, templateText) {
     otpSent: true
   };
 }
+
 
 
 /* ----------------------- VERIFY OTP ----------------------- */
