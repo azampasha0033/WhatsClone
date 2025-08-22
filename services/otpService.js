@@ -10,18 +10,23 @@ function generateOtp() {
 
 /* ----------------------- Helper: Apply Template --------------------- */
 function applyOtpTemplate(
-  templateText = 'Your OTP is {{otp_code}} (expires in {{expiry_minutes}} minutes).',
+  templateText,  // Remove default value here
   otp,
   expiryMinutes = 5
 ) {
+  if (!templateText) {
+    // If no templateText is passed, use the default one
+    templateText = 'Your OTP is {{otp_code}} (expires in {{expiry_minutes}} minutes).';
+  }
+
   return templateText
     .replace('{{otp_code}}', otp)
     .replace('{{expiry_minutes}}', expiryMinutes.toString());
 }
 
+
 /* ----------------------- SEND OTP ----------------------- */
 export async function sendOtp(clientId, phone, templateText) {
-  // Always try to get/reinit client
   let client = getClient(clientId);
   if (!client) throw new Error('WhatsApp client not found');
 
@@ -63,7 +68,7 @@ export async function sendOtp(clientId, phone, templateText) {
   );
 
   // Prepare template message
-  const messageText = applyOtpTemplate(templateText, otp, expiryMinutes);
+  const messageText = applyOtpTemplate(templateText, otp, expiryMinutes); // <-- Proper handling
 
   // Send OTP via WhatsApp
   const chatId = phone.replace(/\D/g, '') + '@c.us';
@@ -79,6 +84,7 @@ export async function sendOtp(clientId, phone, templateText) {
     otpSent: true
   };
 }
+
 
 /* ----------------------- VERIFY OTP ----------------------- */
 export async function verifyOtp(clientId, phone, otp) {
