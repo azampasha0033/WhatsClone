@@ -10,7 +10,6 @@ import { getClient, isClientReady,sessionStatus } from '../clients/getClient.js'
 // If your file is db/messageQueue.js keep this import; if it's db/pendingMessages.js then change accordingly.
 import { MessageQueue } from '../db/messageQueue.js';
 
-
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
