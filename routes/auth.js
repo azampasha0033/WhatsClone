@@ -4,11 +4,12 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { UserModel } from '../db/users.js';
 import { ClientModel } from '../db/clients.js';
-import { getClient, isClientReady,sessionStatus } from '../clients/getClient.js';
+import { getClient, isClientReady } from '../clients/getClient.js';
 
 // ⚠️ Use the same MessageQueue model path you already use elsewhere
 // If your file is db/messageQueue.js keep this import; if it's db/pendingMessages.js then change accordingly.
 import { MessageQueue } from '../db/messageQueue.js';
+
 
 const router = express.Router();
 
@@ -32,28 +33,6 @@ function maskPhone(phoneE164) {
   return s.slice(0, 2) + '******' + s.slice(-4);
 }
 async function sendOtpViaWhatsApp({ clientId, phoneE164, otp }) {
-
-
- let userclient = getClient(clientId);
-  if (!userclient) throw new Error('WhatsApp client not found');
-
-  // If client is not yet connected → wait for it
-  if (sessionStatus.get(userclient) !== 'connected') {
-    console.log(`⚠️ Client ${userclient} not connected, waiting for re-authentication...`);
-
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Client reconnection timeout')), 20000);
-
-      client.once('ready', () => {
-        clearTimeout(timeout);
-        sessionStatus.set(userclient, 'connected');
-        console.log(`✅ Client ${userclient} reconnected & ready`);
-        resolve();
-      });
-    });
-  }
-
-
   const chatId = `${phoneE164}@c.us`;
   const msg = `🔐 Your verification code is: *${otp}*\nThis code will expire in ${OTP_TTL_MIN} minutes.`;
 
