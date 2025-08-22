@@ -4,8 +4,12 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { UserModel } from '../db/users.js';
 import { ClientModel } from '../db/clients.js';
-import { getClient, sessionStatus, isClientReady } from '../clients/getClient.js'; // Ensure you're using the correct imports
+import { getClient, isClientReady,sessionStatus } from '../clients/getClient.js';
+
+// ⚠️ Use the same MessageQueue model path you already use elsewhere
+// If your file is db/messageQueue.js keep this import; if it's db/pendingMessages.js then change accordingly.
 import { MessageQueue } from '../db/messageQueue.js';
+
 
 const router = express.Router();
 
@@ -28,36 +32,34 @@ function maskPhone(phoneE164) {
   if (s.length <= 4) return '****';
   return s.slice(0, 2) + '******' + s.slice(-4);
 }
-
-/* ---------------- Helper to Send OTP ---------------- */
 async function sendOtpViaWhatsApp({ clientId, phoneE164, otp }) {
-  let client = getClient(clientId);
 
-  if (!client) {
-    throw new Error('WhatsApp client not found');
-  }
+
+ let userclient = getClient(clientId);
+  if (!userclient) throw new Error('WhatsApp client not found');
 
   // If client is not yet connected → wait for it
-  if (sessionStatus.get(clientId) !== 'connected') {
-    console.log(`⚠️ Client ${clientId} not connected, trying to re-authenticate...`);
+  if (sessionStatus.get(userclient) !== 'connected') {
+    console.log(`⚠️ Client ${userclient} not connected, waiting for re-authentication...`);
 
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Client reconnection timeout')), 20000);
 
       client.once('ready', () => {
         clearTimeout(timeout);
-        sessionStatus.set(clientId, 'connected');
-        console.log(`✅ Client ${clientId} reconnected & ready`);
+        sessionStatus.set(userclient, 'connected');
+        console.log(`✅ Client ${userclient} reconnected & ready`);
         resolve();
       });
     });
   }
 
+
   const chatId = `${phoneE164}@c.us`;
   const msg = `🔐 Your verification code is: *${otp}*\nThis code will expire in ${OTP_TTL_MIN} minutes.`;
 
+  const client = getClient(clientId);
   if (!client || !isClientReady(clientId)) {
-    // If the client is not ready, queue the message
     await MessageQueue.create({
       clientId,
       to: phoneE164,
@@ -67,29 +69,93 @@ async function sendOtpViaWhatsApp({ clientId, phoneE164, otp }) {
     }).catch(() => null);
     return { queued: true, sent: false };
   }
-
-  // If the client is connected and ready, send the OTP message
   const sent = await client.sendMessage(chatId, msg);
   return { queued: false, sent: !!sent?.id?._serialized, messageId: sent?.id?._serialized || null };
 }
 
-/* ---------------- Routes ----------------- */
+/* ---------------- routes ----------------- */
 
-// POST /auth/signup (phone-based OTP)
+// POST /auth/login  { email?, phone?, identifier?, password }
+router.post('/login', async (req, res) => {
+  try {
+    const { email, phone, identifier, password } = req.body;
+    if (!password) return res.status(400).json({ error: 'password is required' });
+
+    // pick identifier priority: explicit email -> explicit phone -> generic identifier
+    let loginBy = null;
+    let query = null;
+
+    const isEmail = (v) => typeof v === 'string' && v.includes('@');
+    const pickEmail = email || (identifier && isEmail(identifier) ? identifier : null);
+    const pickPhone = phone || (!pickEmail && identifier ? identifier : null);
+
+    if (pickEmail) {
+      const normalizedEmail = pickEmail.trim().toLowerCase();
+      query = { email: normalizedEmail };
+      loginBy = 'email';
+    } else if (pickPhone) {
+      const phoneE164 = normalizePhoneToPkE164(String(pickPhone).trim());
+      if (!phoneE164) return res.status(400).json({ error: 'Invalid phone format' });
+      query = { phoneE164 };
+      loginBy = 'phone';
+    } else {
+      return res.status(400).json({ error: 'Provide email or phone (or identifier)' });
+    }
+
+    // need passwordHash to verify + phoneVerified to gate access
+    const user = await UserModel.findOne(query).select('+passwordHash +phoneVerified');
+    // standard ambiguous error
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const passOK = await bcrypt.compare(password, user.passwordHash);
+    if (!passOK) return res.status(401).json({ error: 'Invalid credentials' });
+
+    // Optional gate: require phone to be verified no matter how they log in
+    if (!user.phoneVerified) {
+      return res.status(403).json({ error: 'Phone not verified. Please verify via OTP.' });
+    }
+
+    const token = jwt.sign(
+      { _id: user._id.toString(), email: user.email, clientId: user.clientId, role: user.role },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES }
+    );
+
+    return res.json({
+      ok: true,
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        clientId: user.clientId,
+        role: user.role,
+        phoneVerified: user.phoneVerified,
+        loginBy
+      }
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+
+
+// POST /auth/signup  (phone-based OTP)
 router.post('/signup', async (req, res) => {
   try {
     const { name, email, password, phone, clientId } = req.body;
     if (!email || !password || !phone) {
       return res.status(400).json({ error: 'name, email, password and phone are required' });
     }
-
-    // Choose WA sender: request clientId OR DEFAULT_WA_CLIENT_ID
+ 
+    // choose WA sender: request clientId OR DEFAULT_WA_CLIENT_ID
     let otpSenderClientId = clientId || process.env.DEFAULT_WA_CLIENT_ID || null;
     if (!otpSenderClientId) {
       return res.status(400).json({ error: 'clientId required (no default sender configured)' });
     }
 
-    // Validate sender client exists (optional but helpful)
+    // validate sender client exists (optional but helpful)
     const clientDoc = await ClientModel.findOne({ clientId: otpSenderClientId });
     if (!clientDoc) return res.status(400).json({ error: 'Invalid clientId for OTP sender' });
 
@@ -101,7 +167,7 @@ router.post('/signup', async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Generate OTP
+    // generate OTP
     const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
     const otpHash = await bcrypt.hash(otp, 10);
     const otpExpiresAt = new Date(Date.now() + OTP_TTL_MIN * 60 * 1000);
@@ -131,8 +197,6 @@ router.post('/signup', async (req, res) => {
     return res.status(500).json({ error: e.message });
   }
 });
-
-// Other routes remain the same...
 
 // POST /auth/forgot-password  { identifier }   // identifier can be email OR phone
 router.post('/forgot-password', async (req, res) => {
@@ -188,7 +252,6 @@ router.post('/forgot-password', async (req, res) => {
     return res.status(500).json({ error: e.message });
   }
 });
-
 // POST /auth/reset-password  { identifier, code, newPassword }
 router.post('/reset-password', async (req, res) => {
   try {
@@ -247,6 +310,7 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+
 // POST /auth/verify-phone  { phone, code }
 router.post('/verify-phone', async (req, res) => {
   try {
@@ -299,6 +363,7 @@ router.post('/verify-phone', async (req, res) => {
     return res.status(500).json({ error: e.message });
   }
 });
+
 
 // POST /auth/resend-otp  { phone }
 router.post('/resend-otp', async (req, res) => {
