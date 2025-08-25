@@ -282,14 +282,39 @@ if(sent){
   });
 
   /* ------------------------------- Calls Update ------------------------------ */
+client.on('call', async (call) => {
+  console.log("📞 Call detected:", call);
 
-  client.on('call', (call) => {
-   console.log("📞 Incoming/outgoing call event:", call);
-   console.log('-------------------------------');
-   console.log("From:", call.from, "Is group:", call.isGroup, "Offer:", call.offerTime);
-     console.log('-------------------------------');
-       console.log('-------------------------------');
+  try {
+    const page = client.pupPage;
+    if (page) {
+      await page.evaluate(() => {
+        // WhatsApp Web uses a button with aria-label="Join" or text "Join"
+        const joinBtn = [...document.querySelectorAll('button')].find(
+          btn => btn.innerText.includes("Join") || btn.getAttribute("aria-label")?.includes("Join")
+        );
+        if (joinBtn) {
+          joinBtn.click();
+          console.log("✅ Auto-joined the call");
+        } else {
+          console.log("⚠️ Join button not found in DOM");
+        }
+      });
+    }
+  } catch (err) {
+    console.error("❌ Failed to auto-join:", err.message);
+  }
 });
+
+
+
+//   client.on('call', (call) => {
+//    console.log("📞 Incoming/outgoing call event:", call);
+//    console.log('-------------------------------');
+//    console.log("From:", call.from, "Is group:", call.isGroup, "Offer:", call.offerTime);
+//      console.log('-------------------------------');
+//        console.log('-------------------------------');
+// });
 
 
 
