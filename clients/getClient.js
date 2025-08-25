@@ -154,49 +154,70 @@ if(sent){
 }
 
       
-    try {
-      const page = client.pupPage;
-      // console.log(page);
-      if (page && !page.__joinedHooked) {
-     page.on('console', (msg) => {
-       if (msg.text().includes("joined the call")) {
-         console.log("✅ User joined call link");
-         global.io?.to(clientId).emit('call-joined', { clientId });
-       }
-     });
-     page.__joinedHooked = true;
-   }else{
+  try {
+  const page = client.pupPage;
+
+  if (page && !page.__joinedHooked) {
+    // Detect "joined the call" messages in WA console logs
+    page.on('console', (msg) => {
+      if (msg.text().includes("joined the call")) {
+        console.log("✅ User joined call link");
+        global.io?.to(clientId).emit('call-joined', { clientId });
+      }
+    });
+    page.__joinedHooked = true;
+  } else {
     console.log("Page not found or already hooked for joined event");
-   }
+  }
 
-      if (page && !page.__consoleHooked) {
-        page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
-        page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
-        page.on('pageerror', (e) => console.warn('📄[WA] PAGEEXCEPTION', e?.message || e));
+  if (page && !page.__consoleHooked) {
+    // Pipe WA console logs
+    page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
+    page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
+    page.on('pageerror', (e) => console.warn('📄[WA] PAGEEXCEPTION', e?.message || e));
 
-        page.on('close', async () => {
-          console.warn(`⚠️ Puppeteer page closed for ${clientId}`);
-          readyFlags.set(clientId, false);
-          sessionStatus.set(clientId, 'disconnected');
+    page.on('close', async () => {
+      console.warn(`⚠️ Puppeteer page closed for ${clientId}`);
+      readyFlags.set(clientId, false);
+      sessionStatus.set(clientId, 'disconnected');
 
-          await ClientModel.updateOne(
-            { clientId },
-            { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'PAGE_CLOSED' } }
-          ).catch(() => null);
+      await ClientModel.updateOne(
+        { clientId },
+        { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'PAGE_CLOSED' } }
+      ).catch(() => null);
 
-          try { await client.destroy(); } catch {}
-          clients.delete(clientId);
-          qrCodes.delete(clientId);
-          readyFlags.delete(clientId);
-          sessionStatus.delete(clientId);
+      try { await client.destroy(); } catch {}
+      clients.delete(clientId);
+      qrCodes.delete(clientId);
+      readyFlags.delete(clientId);
+      sessionStatus.delete(clientId);
+    });
+
+    // 🔥 Inject hook into WhatsApp Web to intercept WebRTC connections
+    await page.evaluate(() => {
+      const OrigPeerConnection = window.RTCPeerConnection;
+      window.RTCPeerConnection = function (...args) {
+        const pc = new OrigPeerConnection(...args);
+        console.log("✅ WA WebRTC PeerConnection hooked");
+
+        pc.addEventListener("track", (event) => {
+          if (event.track.kind === "audio") {
+            console.log("🎤 Inbound audio track from WhatsApp call detected");
+            // TODO: forward audio via WebSocket to your backend for STT
+          }
         });
 
-        page.__consoleHooked = true;
-        console.log('🔌 ready: page console piping enabled');
-      }
-    } catch (e) {
-      console.warn('⚠️ ready: console pipe failed:', e?.message);
-    }
+        return pc;
+      };
+    });
+
+    page.__consoleHooked = true;
+    console.log('🔌 ready: page console piping enabled + WebRTC hook added');
+  }
+} catch (e) {
+  console.warn('⚠️ ready: console pipe failed:', e?.message);
+}
+
 
  // ✅ Single block to save chats + messages
   try {
