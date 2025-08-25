@@ -313,13 +313,38 @@ if(sent){
 client.on("call", async (call) => {
   console.log("📞 Call detected:", call);
 
-  // Trigger your bot pipeline (not directly SDP yet)
-  await startBotCall(call.id);
+  const page = client.pupPage;
 
-  // Right now we cannot send SDP back to WA via wa-web.js
-  // Audio bridging will happen via the Puppeteer WebRTC hook
+  if (page) {
+    await page.evaluate(() => {
+      const OrigPC = window.RTCPeerConnection;
+      window.RTCPeerConnection = function (...args) {
+        const pc = new OrigPC(...args);
+        console.log("✅ Bot auto-joined WA call");
+
+        // 🎤 Capture human audio
+        pc.addEventListener("track", (event) => {
+          if (event.track.kind === "audio") {
+            console.log("🎤 Human is speaking");
+            // TODO: forward audio to backend (STT pipeline)
+          }
+        });
+
+        // 📢 Inject bot audio into call
+        const origAddTrack = pc.addTrack.bind(pc);
+        pc.addTrack = function (track, ...rest) {
+          console.log("📢 Bot audio injected into call");
+          return origAddTrack(track, ...rest);
+        };
+
+        return pc;
+      };
+    });
+  }
+
   global.io?.to(clientId).emit("call-detected", { clientId, call });
 });
+
 
 
 
