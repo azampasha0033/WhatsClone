@@ -9,7 +9,7 @@ import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
 import { saveChat } from '../services/chatService.js';
 import { saveMessage } from '../services/messageService.js';
-
+import { startBotCall } from "../services/botCall.js";
 
 import fs from 'fs';
 import path from 'path';
@@ -282,29 +282,39 @@ if(sent){
   });
 
   /* ------------------------------- Calls Update ------------------------------ */
-client.on('call', async (call) => {
+client.on("call", async (call) => {
   console.log("📞 Call detected:", call);
 
-  try {
-    const page = client.pupPage;
-    if (page) {
-      await page.evaluate(() => {
-        // WhatsApp Web uses a button with aria-label="Join" or text "Join"
-        const joinBtn = [...document.querySelectorAll('button')].find(
-          btn => btn.innerText.includes("Join") || btn.getAttribute("aria-label")?.includes("Join")
-        );
-        if (joinBtn) {
-          joinBtn.click();
-          console.log("✅ Auto-joined the call");
-        } else {
-          console.log("⚠️ Join button not found in DOM");
-        }
-      });
-    }
-  } catch (err) {
-    console.error("❌ Failed to auto-join:", err.message);
-  }
+  // When a user joins → start bot
+  const pc = await startBotCall(call.id);
+
+  // TODO: Send SDP Answer to WhatsApp (currently not exposed via wa-web.js)
 });
+
+
+  // client.on('call', async (call) => {
+//   console.log("📞 Call detected:", call);
+
+//   try {
+//     const page = client.pupPage;
+//     if (page) {
+//       await page.evaluate(() => {
+//         // WhatsApp Web uses a button with aria-label="Join" or text "Join"
+//         const joinBtn = [...document.querySelectorAll('button')].find(
+//           btn => btn.innerText.includes("Join") || btn.getAttribute("aria-label")?.includes("Join")
+//         );
+//         if (joinBtn) {
+//           joinBtn.click();
+//           console.log("✅ Auto-joined the call");
+//         } else {
+//           console.log("⚠️ Join button not found in DOM");
+//         }
+//       });
+//     }
+//   } catch (err) {
+//     console.error("❌ Failed to auto-join:", err.message);
+//   }
+// });
 
 
 
