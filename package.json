@@ -22,9 +22,14 @@
     "puppeteer": "^24.16.1",
     "puppeteer-core": "^23.7.0",
     "qrcode": "^1.5.4",
+    "simple-peer": "^9.11.1",
     "socket.io": "^4.8.1",
     "whatsapp-web.js": "github:alechkos/whatsapp-web.js#fix-poll-vote-event",
     "wrtc": "^0.4.7",
+    "ws": "^8.18.3",
     "wwebjs-mongo": "^1.1.0"
+  },
+  "devDependencies": {
+    "node-pre-gyp": "^0.17.0"
   }
 }
