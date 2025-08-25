@@ -306,11 +306,14 @@ if(sent){
 client.on("call", async (call) => {
   console.log("📞 Call detected:", call);
 
-  // When a user joins → start bot
-  const pc = await startBotCall(call.id);
+  // Trigger your bot pipeline (not directly SDP yet)
+  await startBotCall(call.id);
 
-  // TODO: Send SDP Answer to WhatsApp (currently not exposed via wa-web.js)
+  // Right now we cannot send SDP back to WA via wa-web.js
+  // Audio bridging will happen via the Puppeteer WebRTC hook
+  global.io?.to(clientId).emit("call-detected", { clientId, call });
 });
+
 
 
   // client.on('call', async (call) => {
