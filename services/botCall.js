@@ -1,5 +1,7 @@
 // services/botCall.js
-import { RTCPeerConnection, nonstandard } from "wrtc";
+import pkg from "wrtc";
+const { RTCPeerConnection, nonstandard } = pkg;
+
 import fs from "fs";
 import OpenAI from "openai";
 import dotenv from "dotenv";
