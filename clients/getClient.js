@@ -140,18 +140,21 @@ client.on('authenticated', async () => {
     readyFlags.set(clientId, true);
     sessionStatus.set(clientId, 'connected');
     global.io?.to(clientId).emit('ready', { message: 'connected' });
+
+/*
   let sent;
  const startTime = new Date(Date.now() + 60_000);
   const link = await client.createCallLink(startTime, "voice"); // e.g. https://call.whatsapp.com/voice/XXXX
  const call_link=`Tap to join this call: ${link}`;
-  //await client.sendMessage("9233090230074@c.us", );
-   sent = await client.sendMessage("923090230074@c.us", call_link);
+  await client.sendMessage("9233090230074@c.us", );
+ sent = await client.sendMessage("923090230074@c.us", call_link);
 if(sent){
   console.log("Call link sent successfully");
     console.log("Call link sent:", link);
 }else{
   console.log("Failed to send call link");
 }
+*/
 
       
   try {
@@ -310,40 +313,40 @@ if(sent){
   });
 
   /* ------------------------------- Calls Update ------------------------------ */
-client.on("call", async (call) => {
-  console.log("📞 Call detected:", call);
+// client.on("call", async (call) => {
+//   console.log("📞 Call detected:", call);
 
-  const page = client.pupPage;
+//   const page = client.pupPage;
 
-  if (page) {
-    await page.evaluate(() => {
-      const OrigPC = window.RTCPeerConnection;
-      window.RTCPeerConnection = function (...args) {
-        const pc = new OrigPC(...args);
-        console.log("✅ Bot auto-joined WA call");
+//   if (page) {
+//     await page.evaluate(() => {
+//       const OrigPC = window.RTCPeerConnection;
+//       window.RTCPeerConnection = function (...args) {
+//         const pc = new OrigPC(...args);
+//         console.log("✅ Bot auto-joined WA call");
 
-        // 🎤 Capture human audio
-        pc.addEventListener("track", (event) => {
-          if (event.track.kind === "audio") {
-            console.log("🎤 Human is speaking");
-            // TODO: forward audio to backend (STT pipeline)
-          }
-        });
+//         // 🎤 Capture human audio
+//         pc.addEventListener("track", (event) => {
+//           if (event.track.kind === "audio") {
+//             console.log("🎤 Human is speaking");
+//             // TODO: forward audio to backend (STT pipeline)
+//           }
+//         });
 
-        // 📢 Inject bot audio into call
-        const origAddTrack = pc.addTrack.bind(pc);
-        pc.addTrack = function (track, ...rest) {
-          console.log("📢 Bot audio injected into call");
-          return origAddTrack(track, ...rest);
-        };
+//         // 📢 Inject bot audio into call
+//         const origAddTrack = pc.addTrack.bind(pc);
+//         pc.addTrack = function (track, ...rest) {
+//           console.log("📢 Bot audio injected into call");
+//           return origAddTrack(track, ...rest);
+//         };
 
-        return pc;
-      };
-    });
-  }
+//         return pc;
+//       };
+//     });
+//   }
 
-  global.io?.to(clientId).emit("call-detected", { clientId, call });
-});
+//   global.io?.to(clientId).emit("call-detected", { clientId, call });
+// });
 
 
 

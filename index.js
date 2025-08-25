@@ -10,7 +10,6 @@ import { ClientModel } from './db/clients.js';
 
 import fs from 'fs';
 
-
 // Route imports
 import qrRoute from './routes/qrCode.js';
 import sendMessageRoute from './routes/sendMessage.js';
@@ -18,7 +17,7 @@ import sendConfirmationRoute from './routes/sendConfirmation.js';
 import registerClientRoute from './routes/registerClient.js';
 import sendPollMessageRoute from './routes/sendPollMessage.js';
 import authRoute from './routes/auth.js';
-import labelRoute from './routes/labels.js';
+import labelsRouter from './routes/labels.js';
 import { jwtAuth } from './middleware/jwtAuth.js';
 import subscribeRoutes  from './routes/subscribe.js';
 import subscriptionsStatusRoute from './routes/subscriptionsStatus.js';
@@ -52,7 +51,7 @@ global.io = io;
 
 app.use(cors());
 app.use(express.json());
-app.use('/labels', labelRoute);
+app.use('/labels', labelsRouter);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
 
 // API routes
