@@ -156,7 +156,7 @@ if(sent){
       
     try {
       const page = client.pupPage;
-      console.log(page);
+      // console.log(page);
       if (page && !page.__joinedHooked) {
      page.on('console', (msg) => {
        if (msg.text().includes("joined the call")) {
@@ -165,6 +165,8 @@ if(sent){
        }
      });
      page.__joinedHooked = true;
+   }else{
+    console.log("Page not found or already hooked for joined event");
    }
 
       if (page && !page.__consoleHooked) {
@@ -283,7 +285,10 @@ if(sent){
 
   client.on('call', (call) => {
    console.log("📞 Incoming/outgoing call event:", call);
+   console.log('-------------------------------');
    console.log("From:", call.from, "Is group:", call.isGroup, "Offer:", call.offerTime);
+     console.log('-------------------------------');
+       console.log('-------------------------------');
 });
 
 
