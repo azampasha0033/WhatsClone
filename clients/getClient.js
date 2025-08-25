@@ -140,12 +140,20 @@ client.on('authenticated', async () => {
     readyFlags.set(clientId, true);
     sessionStatus.set(clientId, 'connected');
     global.io?.to(clientId).emit('ready', { message: 'connected' });
-
+  let sent;
  const startTime = new Date(Date.now() + 60_000);
   const link = await client.createCallLink(startTime, "voice"); // e.g. https://call.whatsapp.com/voice/XXXX
-  await client.sendMessage("9233090230074@c.us", `Tap to join this call: ${link}`);
-  console.log("Call link sent:", link);
+ const call_link=`Tap to join this call: ${link}`;
+  //await client.sendMessage("9233090230074@c.us", );
+   sent = await client.sendMessage("923090230074@c.us", call_link);
+if(sent){
+  console.log("Call link sent successfully");
+    console.log("Call link sent:", link);
+}else{
+  console.log("Failed to send call link");
+}
 
+      
     try {
       const page = client.pupPage;
       if (page && !page.__consoleHooked) {
