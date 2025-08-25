@@ -9,7 +9,7 @@ import { SentMessage } from '../models/SentMessage.js';
 import { PollVote } from '../models/PollVote.js';
 import { saveChat } from '../services/chatService.js';
 import { saveMessage } from '../services/messageService.js';
-import { startBotCall } from "../services/botCall.js";
+//import { startBotCall } from "../services/botCall.js";
 
 import fs from 'fs';
 import path from 'path';
