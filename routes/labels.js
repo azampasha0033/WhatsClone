@@ -2,6 +2,7 @@ import express from 'express';
 import { Label } from '../models/Label.js';
 import { clients } from '../clients/getClient.js'; // make sure you export this Map
 
+
 const router = express.Router();
 
 /* --------------------- CRUD (DB only) --------------------- */
@@ -63,19 +64,6 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-
-router.post('/assign-by-name', async (req, res) => {
-  try {
-    const { clientId, chatId, labels } = req.body;
-    const client = clients.get(clientId);
-    if (!client) return res.status(404).json({ error: 'Client not connected' });
-
-    await setChatLabelsByName(client, chatId, labels);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
 
 
 /* ---------------- WhatsApp helpers ---------------- */
