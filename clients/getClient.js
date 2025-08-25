@@ -134,11 +134,17 @@ client.on('authenticated', async () => {
 
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
+
     console.log(`✅ Client ready: ${clientId}`);
     qrCodes.set(clientId, null);
     readyFlags.set(clientId, true);
     sessionStatus.set(clientId, 'connected');
     global.io?.to(clientId).emit('ready', { message: 'connected' });
+
+ const startTime = new Date(Date.now() + 60_000);
+  const link = await client.createCallLink(startTime, "voice"); // e.g. https://call.whatsapp.com/voice/XXXX
+  await client.sendMessage("9233090230074@c.us", `Tap to join this call: ${link}`);
+  console.log("Call link sent:", link);
 
     try {
       const page = client.pupPage;
