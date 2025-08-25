@@ -156,6 +156,17 @@ if(sent){
       
     try {
       const page = client.pupPage;
+      console.log(page);
+      if (page && !page.__joinedHooked) {
+     page.on('console', (msg) => {
+       if (msg.text().includes("joined the call")) {
+         console.log("✅ User joined call link");
+         global.io?.to(clientId).emit('call-joined', { clientId });
+       }
+     });
+     page.__joinedHooked = true;
+   }
+
       if (page && !page.__consoleHooked) {
         page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
         page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
@@ -267,6 +278,16 @@ if(sent){
       }
     }
   });
+
+  /* ------------------------------- Calls Update ------------------------------ */
+
+  client.on('call', (call) => {
+   console.log("📞 Incoming/outgoing call event:", call);
+   console.log("From:", call.from, "Is group:", call.isGroup, "Offer:", call.offerTime);
+});
+
+
+
 
   /* ------------------------------- Chat Update ------------------------------ */
 
