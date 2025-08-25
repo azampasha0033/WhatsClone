@@ -21,7 +21,7 @@ import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 const clients = new Map();
 const qrCodes = new Map();
 const readyFlags = new Map();
-const sessionStatus = new Map();   // ✅ Added
+const sessionStatus = new Map();   
 
 const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
 

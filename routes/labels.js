@@ -1,6 +1,6 @@
 import express from 'express';
 import { Label } from '../models/Label.js';
-import { clients } from '../clients/getClient.js'; // make sure you export this Map
+import { clients, qrCodes, readyFlags, sessionStatus } from '../clients/getClient.js';
 
 
 const router = express.Router();
