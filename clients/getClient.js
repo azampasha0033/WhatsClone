@@ -194,22 +194,29 @@ if(sent){
     });
 
     // 🔥 Inject hook into WhatsApp Web to intercept WebRTC connections
-    await page.evaluate(() => {
-      const OrigPeerConnection = window.RTCPeerConnection;
-      window.RTCPeerConnection = function (...args) {
-        const pc = new OrigPeerConnection(...args);
-        console.log("✅ WA WebRTC PeerConnection hooked");
+   await page.evaluate(() => {
+  const OrigPC = window.RTCPeerConnection;
+  window.RTCPeerConnection = function(...args) {
+    const pc = new OrigPC(...args);
+    console.log("✅ Hooked into WA PeerConnection");
 
-        pc.addEventListener("track", (event) => {
-          if (event.track.kind === "audio") {
-            console.log("🎤 Inbound audio track from WhatsApp call detected");
-            // TODO: forward audio via WebSocket to your backend for STT
-          }
-        });
-
-        return pc;
-      };
+    pc.addEventListener("track", (event) => {
+      if (event.track.kind === "audio") {
+        console.log("🎤 Got audio from WA call");
+        // TODO: forward audio via WebSocket to backend
+      }
     });
+
+    const sender = pc.addTrack; // save reference
+    pc.addTrack = function(track, ...rest) {
+      console.log("📢 Bot can inject audio here");
+      return sender.call(this, track, ...rest);
+    };
+
+    return pc;
+  };
+});
+
 
     page.__consoleHooked = true;
     console.log('🔌 ready: page console piping enabled + WebRTC hook added');
