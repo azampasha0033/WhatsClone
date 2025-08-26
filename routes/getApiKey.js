@@ -8,7 +8,7 @@ const router = express.Router();
 router.get('/get-api-key/:clientId', async (req, res) => {
   try {
     const id = (req.params.clientId || '').trim();
-
+    
     // Log incoming request for debugging purposes
     console.log(`Request to get API key for clientId: ${id}`);
 
@@ -22,7 +22,7 @@ router.get('/get-api-key/:clientId', async (req, res) => {
     console.log('Query to find client:', query);
 
     // Try to find the client based on clientId or _id
-    const client = await ClientModel.findOne(query).select('apiKey').lean();
+    const client = await ClientModel.findOne(query).select('apiKey');
     
     if (!client) {
       console.log(`Client not found with ID: ${id}`);
@@ -30,6 +30,7 @@ router.get('/get-api-key/:clientId', async (req, res) => {
     }
 
     // Return the API key if client is found
+    console.log(`API Key found for client ${id}:`, client.apiKey);
     res.json({ ok: true, apiKey: client.apiKey });
   } catch (e) {
     console.error('Error in fetching API key:', e);
