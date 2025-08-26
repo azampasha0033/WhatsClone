@@ -7,7 +7,7 @@ import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import { connectDB } from './db/mongo.js';
 import { ClientModel } from './db/clients.js';
-import contactsImportRoute from './routes/contacts-import.js';  // Correct import
+
 
 
 
@@ -32,6 +32,7 @@ import otpRoute from './routes/otp.js';
 import path from 'path';
 // index.js
 import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
+import contactsImportRoute from './routes/contacts-import.js';  
 
 
 // import usersList from './routes/users-list.js';
