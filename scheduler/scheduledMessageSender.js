@@ -18,6 +18,8 @@ export function startScheduledMessageSender() {
 
       if (messagesToSend.length === 0) {
         console.log("No messages to send at this time.");
+      }else{
+        console.log(`Found ${messagesToSend.length} message(s) to send.`);
       }
 
       // Process each message that needs to be sent
