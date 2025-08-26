@@ -29,13 +29,14 @@ router.post('/', async (req, res) => {
       }
 
       // Schedule the message for this user
-      const scheduledMessage = new ScheduledMessage({
-        clientId,
-        chatId,
-        message,
-        sendAt: new Date(sendAt),
-        isSent: false
-      });
+   const scheduledMessage = new ScheduledMessage({
+  clientId,
+  chatId,
+  message,
+  sendAt: new Date(sendAt),  
+  isSent: false
+});
+
 
       scheduledMessages.push(scheduledMessage);
 
