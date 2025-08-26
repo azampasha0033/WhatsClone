@@ -4,25 +4,36 @@ import { getClient } from '../clients/getClient.js';
 import { sendMessage } from '../utils/sendMessage.js';
 
 export function startScheduledMessageSender() {
+  // The cron job runs every minute (every time this executes, it checks for scheduled messages)
   cron.schedule('* * * * *', async () => {  // Runs every minute
     const now = new Date();
-    console.log(`Cron job running at: ${now.toISOString()}`);  // Log the time for debugging
+    console.log(`Cron job running at: ${now.toISOString()}`);  // Log the current time for debugging
 
     try {
+      // Fetch all unsent messages that should be sent now (sendAt <= now)
       const messagesToSend = await ScheduledMessage.find({
-        sendAt: { $lte: now },
-        isSent: false
+        sendAt: { $lte: now },  // Only get messages where sendAt <= current time
+        isSent: false  // Only get messages that haven't been sent yet
       });
 
+      if (messagesToSend.length === 0) {
+        console.log("No messages to send at this time.");
+      }
+
+      // Process each message that needs to be sent
       for (let msg of messagesToSend) {
-        const { clientId, chatId, message } = msg;
-        const client = await getClient(clientId);
+        const { clientId, chatId, message } = msg;  // Extract message details
+        const client = await getClient(clientId);  // Get the client instance for the given clientId
 
         if (client) {
           try {
+            // Send the message via the sendMessage function
             await sendMessage(client, chatId, message);
-            msg.isSent = true;  // Mark as sent
-            await msg.save();  // Save the status to the database
+
+            // Mark the message as sent
+            msg.isSent = true;
+            await msg.save();  // Save the updated status to the database
+
             console.log(`Message sent to ${chatId}`);
           } catch (err) {
             console.error(`Failed to send message to ${chatId}:`, err.message);
