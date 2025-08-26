@@ -33,6 +33,8 @@ import path from 'path';
 // index.js
 import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
 import contactsImportRoute from './routes/contacts-import.js';  
+import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.js';
+
 
 
 // import usersList from './routes/users-list.js';
@@ -56,6 +58,10 @@ global.io = io;
 
 app.use(cors());
 app.use(express.json());
+
+startScheduledMessageSender();
+
+
 app.use('/labels', labelRoute);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
 app.use('/import-contacts', contactsImportRoute);  // Register the route
@@ -117,7 +123,7 @@ app.get('/chats/:clientId', async (req, res) => {
     if (mongoose.Types.ObjectId.isValid(clientId)) {
       const record = await ClientModel.findById(clientId);
       if (record && record.clientId) {
-        //console.log(`Resolved clientId: ${record.clientId} using field: _id`);
+        console.log(`Resolved clientId: ${record.clientId} using field: _id`);
         clientId = record.clientId;
       }
     }
@@ -268,7 +274,7 @@ const startServer = async () => {
       activeClients.map(async ({ clientId }) => {
         try {
           await getClient(clientId);
-          //console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
+          console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
         } catch (err) {
           console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
         }
@@ -283,11 +289,11 @@ io.on('connection', (socket) => {
 
   socket.on('join-client-room', (clientId) => {
     if (!clientId) return;
-    //console.log('📡 join-client-room received:', clientId);
+    console.log('📡 join-client-room received:', clientId);
 
     // prevent duplicate joins
     if (socket.rooms.has(clientId)) {
-      //console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
+      console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
       return;
     }
 
@@ -299,13 +305,13 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    //console.log(`❌ Socket disconnected (id=${socket.id})`);
+    console.log(`❌ Socket disconnected (id=${socket.id})`);
   });
 });
 
 
   server.listen(PORT, () => {
-    //console.log(`🚀 Server running at http://localhost:${PORT}`);
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`❌ Port ${PORT} is already in use.`);
