@@ -34,7 +34,7 @@ import path from 'path';
 import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
 import contactsImportRoute from './routes/contacts-import.js';  
 import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.js';
-import scheduleMessageRoute from './routes/scheduleMessage.js'
+import scheduleMessageRoute from './routes/scheduleMessage.js';
 
 
 // import usersList from './routes/users-list.js';
