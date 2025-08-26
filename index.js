@@ -7,7 +7,8 @@ import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import { connectDB } from './db/mongo.js';
 import { ClientModel } from './db/clients.js';
-import contactsImportRoute from './routes/contacts-import.js'; 
+import contactsImportRoute from './routes/contacts-import';  // Ensure this path is correct
+
 
 import fs from 'fs';
 
