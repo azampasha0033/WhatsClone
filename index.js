@@ -37,6 +37,7 @@ import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.
 import scheduleMessageRoute from './routes/scheduleMessage.js';
 
 
+
 // import usersList from './routes/users-list.js';
 
 if (process.env.NODE_ENV === 'development') {
@@ -62,6 +63,7 @@ app.use(express.json());
 startScheduledMessageSender();
 
 app.use('/schedule', scheduleMessageRoute);
+
 app.use('/labels', labelRoute);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
 app.use('/import-contacts', contactsImportRoute);  // Register the route
