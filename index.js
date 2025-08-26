@@ -34,7 +34,7 @@ import path from 'path';
 import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
 import contactsImportRoute from './routes/contacts-import.js';  
 import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.js';
-
+import scheduleMessageRoute from './routes/scheduleMessage.js'
 
 
 // import usersList from './routes/users-list.js';
@@ -61,7 +61,7 @@ app.use(express.json());
 
 startScheduledMessageSender();
 
-
+app.use('/schedule', scheduleMessageRoute);
 app.use('/labels', labelRoute);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
 app.use('/import-contacts', contactsImportRoute);  // Register the route
