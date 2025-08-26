@@ -12,16 +12,13 @@ router.get('/get-api-key/:clientId', async (req, res) => {
     // Log incoming request for debugging purposes
     console.log(`Request to get API key for clientId: ${id}`);
 
-    // Check if the clientId is a valid Mongo ObjectId
-    let query = { clientId: id };
-    if (mongoose.isValidObjectId(id)) {
-      query = { $or: [{ clientId: id }, { _id: new mongoose.Types.ObjectId(id) }] };
-    }
+    // Query for the clientId directly, no need to check for ObjectId
+    const query = { clientId: id };
 
     // Log the query to help with debugging
     console.log('Query to find client:', query);
 
-    // Try to find the client based on clientId or _id
+    // Try to find the client based on clientId
     const client = await ClientModel.findOne(query).select('apiKey');
     
     if (!client) {

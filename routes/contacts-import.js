@@ -7,6 +7,8 @@ import { Chat } from '../models/Chat.js';  // Adjust this import as needed
 
 const router = express.Router();
 
+console.log("🚀 Setting up contacts import route...");
+
 // Read environment variables
 const uploadDir = process.env.BASE_DIR || path.join(process.cwd(), "uploads");
 const publicUrl = process.env.PUBLIC_URL || "http://localhost:3000"; // Change if necessary
@@ -16,6 +18,7 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
   console.log("✅ Created upload folder at", uploadDir);
 }
+
 
 // Configure Multer storage
 const storage = multer.diskStorage({
