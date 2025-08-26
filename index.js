@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import { connectDB } from './db/mongo.js';
 import { ClientModel } from './db/clients.js';
+import contactsImportRoute from './routes/contacts-import.js'; 
 
 import fs from 'fs';
 
@@ -54,7 +55,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/labels', labelRoute);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
-
+app.use('/import-contacts', contactsImportRoute);
 // API routes
 app.use("/upload", uploadRouter);
 
