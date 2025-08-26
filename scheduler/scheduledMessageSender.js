@@ -6,11 +6,11 @@ import { sendMessage } from '../utils/sendMessage.js';
 export function startScheduledMessageSender() {
   // The cron job runs every minute (every time this executes, it checks for scheduled messages)
   cron.schedule('* * * * *', async () => {  // Runs every minute
-    const now = new Date();  // Get current UTC time
+    const now = new Date();
     console.log(`Cron job running at: ${now.toISOString()}`);  // Log the current time for debugging
 
     try {
-      // Fetch messages that need to be sent (sendAt <= now)
+      // Fetch all unsent messages that should be sent now (sendAt <= now)
       const messagesToSend = await ScheduledMessage.find({
         sendAt: { $lte: now },  // Only get messages where sendAt <= current time
         isSent: false  // Only get messages that haven't been sent yet
@@ -18,14 +18,13 @@ export function startScheduledMessageSender() {
 
       if (messagesToSend.length === 0) {
         console.log("No messages to send at this time.");
-      } else {
+      }else{
         console.log(`Found ${messagesToSend.length} message(s) to send.`);
       }
 
       // Process each message that needs to be sent
       for (let msg of messagesToSend) {
-        console.log(`Scheduled message: ${msg.message}`);
-        const { clientId, chatId, message } = msg;
+        const { clientId, chatId, message } = msg;  // Extract message details
         const client = await getClient(clientId);  // Get the client instance for the given clientId
 
         if (client) {
