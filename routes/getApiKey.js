@@ -1,27 +1,40 @@
-// routes/getApiKey.js
 import express from 'express';
 import { ClientModel } from '../db/clients.js';
+import mongoose from 'mongoose';
 
 const router = express.Router();
 
+// Route to get the API key for a specific client
 router.get('/get-api-key/:clientId', async (req, res) => {
   try {
     const id = (req.params.clientId || '').trim();
 
+    // Log incoming request for debugging purposes
+    console.log(`Request to get API key for clientId: ${id}`);
+
+    // Check if the clientId is a valid Mongo ObjectId
     let query = { clientId: id };
     if (mongoose.isValidObjectId(id)) {
       query = { $or: [{ clientId: id }, { _id: new mongoose.Types.ObjectId(id) }] };
     }
 
-    const client = await ClientModel.findOne(query).select('apiKey').lean();
-    if (!client) return res.status(404).json({ ok: false, error: 'Client not found' });
+    // Log the query to help with debugging
+    console.log('Query to find client:', query);
 
+    // Try to find the client based on clientId or _id
+    const client = await ClientModel.findOne(query).select('apiKey').lean();
+    
+    if (!client) {
+      console.log(`Client not found with ID: ${id}`);
+      return res.status(404).json({ ok: false, error: 'Client not found' });
+    }
+
+    // Return the API key if client is found
     res.json({ ok: true, apiKey: client.apiKey });
   } catch (e) {
-    console.error(e);
+    console.error('Error in fetching API key:', e);
     res.status(500).json({ ok: false, error: 'Server error' });
   }
 });
 
-// Make sure you are exporting the router as default
 export default router;
