@@ -6,7 +6,8 @@ const scheduledMessageSchema = new mongoose.Schema({
   message: { type: String, required: true },
   sendAt: { type: Date, required: true },
   isSent: { type: Boolean, default: false },
-  scheduleName: { type: String },  // <-- Add this field
+  scheduleName: { type: String }, 
+   failureReason: { type: String, default: null }
 }, { timestamps: true });
 
 export const ScheduledMessage = mongoose.model('ScheduledMessage', scheduledMessageSchema);

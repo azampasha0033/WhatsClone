@@ -53,5 +53,61 @@ router.post('/', async (req, res) => {
   }
 });
 
+// GET /schedule/summary?clientId=XXXX
+router.get('/summary', async (req, res) => {
+  const { clientId } = req.query;
+
+  if (!clientId) {
+    return res.status(400).json({ error: 'clientId is required' });
+  }
+
+  try {
+    // Aggregate messages by scheduleName for the specific client
+    const schedules = await ScheduledMessage.aggregate([
+      { $match: { clientId } },  // FILTER BY CLIENT
+      {
+        $group: {
+          _id: '$scheduleName',
+          totalMessages: { $sum: 1 },
+          sentMessages: { $sum: { $cond: ['$isSent', 1, 0] } },
+          failedMessages: { $sum: { $cond: ['$isSent', 0, 1] } },
+          failedNumbers: { $push: { $cond: ['$isSent', null, { chatId: '$chatId', reason: '$failureReason' }] } },
+          sendAt: { $first: '$sendAt' },       // scheduled time
+          createdAt: { $first: '$createdAt' }, // batch created time
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          scheduleName: '$_id',
+          totalMessages: 1,
+          sentMessages: 1,
+          failedMessages: 1,
+          failedNumbers: {
+            $filter: {
+              input: '$failedNumbers',
+              as: 'f',
+              cond: { $ne: ['$$f', null] } // remove nulls
+            }
+          },
+          sendAt: 1,
+          createdAt: 1,
+          progress: { $concat: [{ $toString: '$sentMessages' }, '/', { $toString: '$totalMessages' }] }
+        }
+      },
+      { $sort: { sendAt: -1 } } // latest first
+    ]);
+
+    res.json({ schedules });
+
+  } catch (err) {
+    console.error('Error fetching schedule summary:', err);
+    res.status(500).json({ error: 'Failed to fetch schedule summary' });
+  }
+});
+
+
+
+
 
 export default router;
