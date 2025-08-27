@@ -25,6 +25,7 @@ import labelRoute from './routes/labels.js';
 import { jwtAuth } from './middleware/jwtAuth.js';
 import subscribeRoutes  from './routes/subscribe.js';
 import subscriptionsStatusRoute from './routes/subscriptionsStatus.js';
+import subscriptionDetailsRouter from './routes/subscriptionDetails.js';
 import { requireActivePlanForClient } from './middleware/requireActivePlanForClient.js';
 import getApiKeyRoute from './routes/getApiKey.js';
 import uploadRouter from "./routes/upload.js";
@@ -72,6 +73,8 @@ app.use("/upload", uploadRouter);
 
 app.use('/api', subscribeRoutes);
 app.use('/subscriptions', subscriptionsStatusRoute);
+app.use('/subscriptions', subscriptionDetailsRouter);
+
 app.use('/auth', authRoute);
 app.use(getApiKeyRoute);
 
