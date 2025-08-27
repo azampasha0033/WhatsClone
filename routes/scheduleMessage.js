@@ -9,50 +9,49 @@ const router = express.Router();
 
 // Handle POST requests to /schedule
 router.post('/', async (req, res) => {
-  const { clientId, message, sendAt, users } = req.body;
+  const { clientId, message, sendAt, users, scheduleName } = req.body;
 
-  if (!clientId || !message || !sendAt || !users || users.length === 0) {
-    return res.status(400).json({ error: 'All fields are required and users should be provided.' });
+  if (!clientId || !message || !sendAt || !users || users.length === 0 || !scheduleName) {
+    return res.status(400).json({ error: 'All fields are required and users should be provided, including scheduleName.' });
   }
 
   try {
     const scheduledMessages = [];
 
     for (const user of users) {
-      const { chatId } = user; // Assuming `chatId` is passed for each user
+      const { chatId } = user;
 
-      // Check if the client can send the message (assertCanSendMessage)
+      // Check message quota
       const { sub, limit, remaining } = await assertCanSendMessage(clientId);
-
       if (remaining <= 0) {
         return res.status(400).json({ error: `No message quota remaining for client ${clientId}` });
       }
 
-      // Schedule the message for this user
-   const scheduledMessage = new ScheduledMessage({
-  clientId,
-  chatId,
-  message,
-  sendAt: new Date(sendAt),  
-  isSent: false
-});
-
+      // Create scheduled message with scheduleName
+      const scheduledMessage = new ScheduledMessage({
+        clientId,
+        chatId,
+        message,
+        sendAt: new Date(sendAt),
+        isSent: false,
+        scheduleName  // <-- Save schedule name
+      });
 
       scheduledMessages.push(scheduledMessage);
 
-      // Increment the usage for the user
-      await incrementUsage(sub._id, 1); // Increment by 1 for each message scheduled
+      // Increment quota
+      await incrementUsage(sub._id, 1);
     }
 
-    // Save the scheduled messages to the database
     await ScheduledMessage.insertMany(scheduledMessages);
 
-    res.status(201).json({ message: `${users.length} messages scheduled successfully` });
+    res.status(201).json({ message: `${users.length} messages scheduled successfully under "${scheduleName}"` });
 
   } catch (err) {
     console.error('Error scheduling messages:', err);
     res.status(500).json({ error: 'Failed to schedule messages' });
   }
 });
+
 
 export default router;

@@ -23,28 +23,27 @@ export function startScheduledMessageSender() {
       }
 
       // Process each message that needs to be sent
-      for (let msg of messagesToSend) {
-        //console.log(`Scheduled message: ${msg.message}`);
-        const { clientId, chatId, message } = msg;
-        const client = await getClient(clientId);  // Get the client instance for the given clientId
+    for (let msg of messagesToSend) {
+      const { clientId, chatId, message, scheduleName } = msg;
+      const client = await getClient(clientId);
 
-        if (client) {
-          try {
-            // Send the message via the sendMessage function
-            await sendMessage(client, chatId, message);
+      if (client) {
+        try {
+          await sendMessage(client, chatId, message);
 
-            // Mark the message as sent
-            msg.isSent = true;
-            await msg.save();  // Save the updated status to the database
+          // Mark as sent
+          msg.isSent = true;
+          await msg.save();
 
-            //console.log(`Message sent to ${chatId}`);
-          } catch (err) {
-            console.error(`Failed to send message to ${chatId}:`, err.message);
-          }
-        } else {
-          console.error(`Client ${clientId} is not available`);
+          console.log(`Message sent to ${chatId} (Schedule: ${scheduleName})`);
+        } catch (err) {
+          console.error(`Failed to send message to ${chatId} (Schedule: ${scheduleName}):`, err.message);
         }
+      } else {
+        console.error(`Client ${clientId} is not available (Schedule: ${scheduleName})`);
       }
+    }
+
     } catch (err) {
       console.error('Error sending scheduled messages:', err.message);
     }
