@@ -118,22 +118,27 @@ router.post('/', requireActivePlanForClient, async (req, res) => {
         if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
         consumed++;
       }
-      else if (attachment) {
-        let media;
-        try {
-          if (String(attachment).startsWith('http')) {
-            media = await MessageMedia.fromUrl(attachment);
-          } else {
-            const base64 = String(attachment).includes(',') ? String(attachment).split(',')[1] : String(attachment);
-            media = new MessageMedia(mimetype, base64, filename);
-          }
-        } catch (e) {
-          return res.status(400).json({ error: 'Invalid attachment', details: e.message });
-        }
-        sent = await client.sendMessage(chatId, media, { caption: message || '' });
-        if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
-        consumed++;
-      }
+     else if (attachment) {
+  let media;
+  try {
+    if (String(attachment).startsWith('http')) {
+      media = await MessageMedia.fromUrl(attachment);
+    } else {
+      const base64 = String(attachment).includes(',')
+        ? String(attachment).split(',')[1]
+        : String(attachment);
+      media = new MessageMedia(mimetype, base64, filename);
+    }
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid attachment', details: e.message });
+  }
+
+  sent = await client.sendMessage(chatId, media, { caption: message || '' });
+
+  if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
+  consumed++;
+}
+
       else {
         sent = await client.sendMessage(chatId, message || '');
         if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
