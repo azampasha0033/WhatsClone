@@ -8,6 +8,7 @@ import pkg from 'whatsapp-web.js';
 import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 import { requireActivePlanForClient } from '../middleware/requireActivePlanForClient.js';
 import { Subscription } from '../models/Subscription.js';
+import axios from "axios";
 
 const { Poll, MessageMedia } = pkg;
 const router = express.Router();
@@ -118,12 +119,16 @@ router.post('/', requireActivePlanForClient, async (req, res) => {
         if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
         consumed++;
       }
-     else if (attachment) {
+   else if (attachment) {
   let media;
   try {
     if (String(attachment).startsWith('http')) {
-      media = await MessageMedia.fromUrl(attachment);
+      // Download file manually instead of fromUrl()
+      const response = await axios.get(attachment, { responseType: 'arraybuffer' });
+      const base64 = Buffer.from(response.data).toString('base64');
+      media = new MessageMedia(mimetype, base64, filename);
     } else {
+      // Handle base64 string directly
       const base64 = String(attachment).includes(',')
         ? String(attachment).split(',')[1]
         : String(attachment);
@@ -133,7 +138,7 @@ router.post('/', requireActivePlanForClient, async (req, res) => {
     return res.status(400).json({ error: 'Invalid attachment', details: e.message });
   }
 
-  sent = await client.sendMessage(chatId, media, { caption: message || '' });
+  sent = await client.sendMessage(`${chatId}@c.us`, media, { caption: message || '' });
 
   if (subInfo?.sub?._id) await incrementUsage(subInfo.sub._id, 1);
   consumed++;
