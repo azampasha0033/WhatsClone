@@ -304,7 +304,11 @@ if(sent){
           sent = await client.sendMessage(chatId, text);
         }
 
-        console.log(`✅ queued item sent type=${type} to=${to}`);
+          console.log(`✅ queued item sent type=${type} to=${to}`);
+    // ✅ Update status to 'sent'
+        await MessageQueue.findByIdAndUpdate(_id, { status: 'sent', sentAt: new Date(), failureReason: null });
+
+
 
       } catch (err) {
         console.error(`⛔ queued send failed to ${to}:`, err.message);

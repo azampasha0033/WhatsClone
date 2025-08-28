@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { ScheduledMessage } from '../models/ScheduledMessage.js';
 import { getClient } from '../clients/getClient.js';
 import { sendMessage } from '../utils/sendMessage.js';
-import { assertCanSendMessage, incrementUsage } from './quota.js';
+import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 
 export function startScheduledMessageSender() {
   // The cron job runs every minute (every time this executes, it checks for scheduled messages)
