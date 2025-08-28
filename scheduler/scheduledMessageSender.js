@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { ScheduledMessage } from '../models/ScheduledMessage.js';
 import { getClient } from '../clients/getClient.js';
 import { sendMessage } from '../utils/sendMessage.js';
+import { assertCanSendMessage, incrementUsage } from './quota.js';
 
 export function startScheduledMessageSender() {
   // The cron job runs every minute (every time this executes, it checks for scheduled messages)
@@ -25,12 +26,31 @@ export function startScheduledMessageSender() {
       // Process each message that needs to be sent
 for (let msg of messagesToSend) {
   const { clientId, chatId, message, scheduleName } = msg;
-  const client = await getClient(clientId);
 
+  let client = getClient(clientId);
+  if (!client) throw new Error('WhatsApp client not found');
+
+  // If client is not yet connected → wait for it
+  if (sessionStatus.get(clientId) !== 'connected') {
+    console.log(`⚠️ Client ${clientId} not connected, waiting for re-authentication...`);
+
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Client reconnection timeout')), 20000);
+
+      client.once('ready', () => {
+        clearTimeout(timeout);
+        sessionStatus.set(clientId, 'connected');
+        console.log(`✅ Client ${clientId} reconnected & ready`);
+        resolve();
+      });
+    });
+  }
+
+  const { sub } = await assertCanSendMessage(clientId);
   if (client) {
     try {
       await sendMessage(client, chatId, message);
-
+      await incrementUsage(sub._id, 1);
       msg.isSent = true;
       msg.failureReason = null; // clear if success
       await msg.save();
@@ -40,7 +60,6 @@ for (let msg of messagesToSend) {
       msg.isSent = false;
       msg.failureReason = err.message; // save failure reason
       await msg.save();
-
       console.error(`Failed to send message to ${chatId} (Schedule: ${scheduleName}):`, err.message);
     }
   } else {
