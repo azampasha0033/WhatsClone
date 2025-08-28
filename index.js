@@ -31,6 +31,9 @@ import getApiKeyRoute from './routes/getApiKey.js';
 import uploadRouter from "./routes/upload.js";
 import otpRoute from './routes/otp.js';
 import path from 'path';
+import templateRoutes from "./routes/template.routes.js";
+import tagRoutes from "./routes/tag.routes.js";
+
 // index.js
 import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
 import contactsImportRoute from './routes/contacts-import.js';  
@@ -64,7 +67,8 @@ app.use(express.json());
 startScheduledMessageSender();
 
 app.use('/schedule', scheduleMessageRoute);
-
+app.use("/api/templates", templateRoutes);
+app.use("/api/tags", tagRoutes);
 app.use('/labels', labelRoute);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
 app.use('/import-contacts', contactsImportRoute);  // Register the route
