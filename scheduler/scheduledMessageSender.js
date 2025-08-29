@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { ScheduledMessage } from '../models/ScheduledMessage.js';
-import { getClient } from '../clients/getClient.js';
+import { getClient, sessionStatus } from '../clients/getClient.js';
 import { sendMessage } from '../utils/sendMessage.js';
 import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
 
