@@ -3,6 +3,7 @@ import { getClient, getQRCode, isClientReady } from '../clients/getClient.js';
 
 const router = express.Router();
 
+
 router.get('/:clientId', async (req, res) => {
   const { clientId } = req.params;
 
