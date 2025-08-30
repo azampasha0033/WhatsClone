@@ -72,24 +72,23 @@ function getClient(clientId) {
 
   //console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
 
-const client = new Client({
-  authStrategy: new LocalAuth({
-    dataPath: path.join(sessionsPath, clientId),  // Unique path for each client
-    clientId,
-  }),
-  puppeteer: {
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-extensions',
-      '--no-zygote',
-      '--single-process'
-    ],
-  },
-});
-
+  const client = new Client({
+    authStrategy: new LocalAuth({
+      dataPath: sessionsPath,
+      clientId,
+    }),
+    puppeteer: {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-extensions',
+         '--no-zygote',
+        '--single-process'
+      ],
+    },
+  });
 
   /* --------------------------------- QR Code -------------------------------- */
   let qrLogged = false;
@@ -116,19 +115,22 @@ const client = new Client({
 
 // 🔄 Force chat sync if client is already connected
 client.on('authenticated', async () => {
-console.log('hi hamza authenticated');
-
+  console.log('trying to authenticate....');
   try {
-    // Wait briefly to stabilize the session before proceeding
+     console.log('try  to authenticate....');
+    // give it a short delay so WA session is stable
     setTimeout(async () => {
+        console.log('tasync Function ry  to authenticate....');
       if (readyFlags.get(clientId)) {
         const chats = await client.getChats();
         for (const chat of chats) {
-          await saveChat(clientId, chat);  // Save the chats to the database
+          await saveChat(clientId, chat);
         }
         console.log(`🔄 Forced sync for already-connected client ${clientId}`);
+      }else{
+         console.log('Else Function ry  to authenticate....');
       }
-    }, 3000); // Adjust delay as needed for the client to stabilize
+    }, 3000);
   } catch (err) {
     console.error(`❌ Forced sync failed for ${clientId}:`, err.message);
   }
@@ -138,14 +140,11 @@ console.log('hi hamza authenticated');
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
 
-   console.log(`✅ Client ready: ${clientId}`);
-  qrCodes.set(clientId, null);  // Clear the QR code as it's no longer needed
-  readyFlags.set(clientId, true);  // Set the client as ready
-  sessionStatus.set(clientId, 'connected');  // Update session status to 'connected'
-  
-  // Emit 'ready' status to frontend
-  global.io?.to(clientId).emit('ready', { message: 'connected' });
-  console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
+    console.log(`✅ Client ready: ${clientId}`);
+    qrCodes.set(clientId, null);
+    readyFlags.set(clientId, true);
+    sessionStatus.set(clientId, 'connected');
+    global.io?.to(clientId).emit('ready', { message: 'connected' });
 
 /*
   let sent;

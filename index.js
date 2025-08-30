@@ -53,7 +53,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*", // allow all domains
+    origin: "*", // Adjust this to only allow trusted origins if needed
     methods: ["GET", "POST"],
     credentials: true
   }
