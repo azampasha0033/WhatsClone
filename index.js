@@ -33,6 +33,8 @@ import otpRoute from './routes/otp.js';
 import path from 'path';
 import templateRoutes from "./routes/template.routes.js";
 import tagRoutes from "./routes/tag.routes.js";
+import flowRoutes from "./routes/flow.routes.js";  // <-- Import flow routes
+
 
 // index.js
 import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
@@ -65,7 +67,7 @@ app.use(cors());
 app.use(express.json());
 
 startScheduledMessageSender();
-
+app.use("/api/flows", flowRoutes);  // <-- Register flow routes
 app.use('/schedule', scheduleMessageRoute);
 app.use("/api/templates", templateRoutes);
 app.use("/api/tags", tagRoutes);
