@@ -1,17 +1,17 @@
 import mongoose from "mongoose";
 
 const nodeSchema = new mongoose.Schema({
-  id: { type: String, required: true },        // React Flow node id
-  type: { type: String, required: true },      // e.g., "input", "output", "customNode"
+  id: { type: String, required: true },
+  type: { type: String, required: true },
   position: {
     x: { type: Number, required: true },
     y: { type: Number, required: true }
   },
-  data: { type: Object, default: {} }          // Node-specific data (labels, metadata, templateId, etc.)
+  data: { type: Object, default: {} }
 }, { _id: false });
 
 const edgeSchema = new mongoose.Schema({
-  id: { type: String, required: true },        // React Flow edge id
+  id: { type: String, required: true },
   source: { type: String, required: true },
   target: { type: String, required: true },
   type: { type: String, default: "default" },
@@ -20,7 +20,7 @@ const edgeSchema = new mongoose.Schema({
 
 const flowSchema = new mongoose.Schema(
   {
-    clientId: { type: String, required: true },    // link to WA client
+    clientId: { type: String, required: true },   // Here we link it to a specific client
     name: { type: String, required: true },
     nodes: [nodeSchema],
     edges: [edgeSchema]
