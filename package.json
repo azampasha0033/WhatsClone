@@ -24,7 +24,7 @@
     "nodemon": "^3.1.10",
     "openai": "^5.15.0",
     "puppeteer": "^24.16.1",
-    "puppeteer-core": "^23.7.0",
+    "puppeteer-core": "^24.17.1",
     "qrcode": "^1.5.4",
     "simple-peer": "^9.11.1",
     "socket.io": "^4.8.1",
