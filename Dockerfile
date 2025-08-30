@@ -4,7 +4,6 @@ FROM node:18-slim
 # Step 2: Set the working directory inside the container
 WORKDIR /app
 
-# Step 3: Install necessary system dependencies for Puppeteer (for headless browser support)
 RUN apt-get update && apt-get install -y \
     libnss3 \
     libatk-bridge2.0-0 \
@@ -17,8 +16,11 @@ RUN apt-get update && apt-get install -y \
     libatk1.0-0 \
     libgtk-3-0 \
     ca-certificates \
+    libdrm2 \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+
+
 
 # Step 4: Copy the package.json and package-lock.json files into the container
 COPY package.json package-lock.json* ./
