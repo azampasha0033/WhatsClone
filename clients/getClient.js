@@ -72,23 +72,24 @@ function getClient(clientId) {
 
   //console.log(`🚀 Initializing WhatsApp client: ${clientId}`);
 
-  const client = new Client({
-    authStrategy: new LocalAuth({
-      dataPath: sessionsPath,
-      clientId,
-    }),
-   puppeteer: {
-  headless: false,  // Set to false for debugging
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-extensions',
-    '--no-zygote',
-    '--single-process'
-  ],
-},
-  });
+const client = new Client({
+  authStrategy: new LocalAuth({
+    dataPath: path.join(sessionsPath, clientId),  // Unique path for each client
+    clientId,
+  }),
+  puppeteer: {
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-extensions',
+      '--no-zygote',
+      '--single-process'
+    ],
+  },
+});
+
 
   /* --------------------------------- QR Code -------------------------------- */
   let qrLogged = false;
