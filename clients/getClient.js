@@ -116,17 +116,19 @@ const client = new Client({
 
 // 🔄 Force chat sync if client is already connected
 client.on('authenticated', async () => {
+console.log('hi hamza authenticated');
+
   try {
-    // give it a short delay so WA session is stable
+    // Wait briefly to stabilize the session before proceeding
     setTimeout(async () => {
       if (readyFlags.get(clientId)) {
         const chats = await client.getChats();
         for (const chat of chats) {
-          await saveChat(clientId, chat);
+          await saveChat(clientId, chat);  // Save the chats to the database
         }
         console.log(`🔄 Forced sync for already-connected client ${clientId}`);
       }
-    }, 3000);
+    }, 3000); // Adjust delay as needed for the client to stabilize
   } catch (err) {
     console.error(`❌ Forced sync failed for ${clientId}:`, err.message);
   }
@@ -136,11 +138,14 @@ client.on('authenticated', async () => {
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
 
-    console.log(`✅ Client ready: ${clientId}`);
-    qrCodes.set(clientId, null);
-    readyFlags.set(clientId, true);
-    sessionStatus.set(clientId, 'connected');
-    global.io?.to(clientId).emit('ready', { message: 'connected' });
+   console.log(`✅ Client ready: ${clientId}`);
+  qrCodes.set(clientId, null);  // Clear the QR code as it's no longer needed
+  readyFlags.set(clientId, true);  // Set the client as ready
+  sessionStatus.set(clientId, 'connected');  // Update session status to 'connected'
+  
+  // Emit 'ready' status to frontend
+  global.io?.to(clientId).emit('ready', { message: 'connected' });
+  console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
 
 /*
   let sent;
