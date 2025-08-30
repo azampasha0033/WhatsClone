@@ -78,14 +78,14 @@ function getClient(clientId) {
       clientId,
     }),
     puppeteer: {
-      headless: true,
+      headless: false,
       args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-extensions',
-         '--no-zygote',
-        '--single-process'
+       '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-extensions',
+    '--no-zygote',
+    '--single-process'
       ],
     },
   });
@@ -93,53 +93,53 @@ function getClient(clientId) {
   /* --------------------------------- QR Code -------------------------------- */
   let qrLogged = false;
   client.on('qr', async (qr) => {
-    if (readyFlags.get(clientId)) return;
-    readyFlags.set(clientId, false);
+  if (readyFlags.get(clientId)) return;
+  readyFlags.set(clientId, false);
 
-    if (!qrLogged) {
-      console.log(`📸 QR received for ${clientId}`);
-      qrLogged = true;
-    }
+  console.log(`📸 QR received for ${clientId}`);
+  const qrData = await qrcode.toDataURL(qr);
+  qrCodes.set(clientId, qrData);
+  sessionStatus.set(clientId, 'pending');
+  global.io?.to(clientId).emit('qr', { qr: qrData });
 
-    const qrData = await qrcode.toDataURL(qr);
-    qrCodes.set(clientId, qrData);
-    sessionStatus.set(clientId, 'pending');
-    global.io?.to(clientId).emit('qr', { qr: qrData });
+  await ClientModel.updateOne(
+    { clientId },
+    { $set: { sessionStatus: 'pending' } }
+  ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
+  console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
+});
 
-    await ClientModel.updateOne(
-      { clientId },
-      { $set: { sessionStatus: 'pending' } }
-    ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
-    console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
-  });
 
 // 🔄 Force chat sync if client is already connected
 client.on('authenticated', async () => {
-  try {
-    // give it a short delay so WA session is stable
-    setTimeout(async () => {
-      if (readyFlags.get(clientId)) {
-        const chats = await client.getChats();
-        for (const chat of chats) {
-          await saveChat(clientId, chat);
-        }
-        console.log(`🔄 Forced sync for already-connected client ${clientId}`);
-      }
-    }, 3000);
-  } catch (err) {
-    console.error(`❌ Forced sync failed for ${clientId}:`, err.message);
-  }
+  console.log(`✅ Client authenticated: ${clientId}`);
+  sessionStatus.set(clientId, 'authenticated');
+
+  // Force a short sync after authentication
+  setTimeout(async () => {
+    const chats = await client.getChats();
+    for (const chat of chats) {
+      await saveChat(clientId, chat);
+    }
+    console.log(`🔄 Forced sync for client ${clientId}`);
+  }, 3000);
 });
 
 
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
 
-    console.log(`✅ Client ready: ${clientId}`);
-    qrCodes.set(clientId, null);
-    readyFlags.set(clientId, true);
+
+  console.log(`✅ Client ready: ${clientId}`);
+  setTimeout(() => {
     sessionStatus.set(clientId, 'connected');
     global.io?.to(clientId).emit('ready', { message: 'connected' });
+  }, 3000);  // Slight delay to ensure readiness
+  qrCodes.set(clientId, null);  // Clear the QR code
+  readyFlags.set(clientId, true);  // Mark as ready
+  sessionStatus.set(clientId, 'connected');  // Set connected status
+  console.log(`🟢 sessionStatus → 'connected' for ${clientId}`);
+  
 
 /*
   let sent;
@@ -511,23 +511,24 @@ if(sent){
 
   /* ------------------------------- Disconnected ----------------------------- */
   client.on('disconnected', async (reason) => {
-    console.warn(`🔌 Disconnected (${clientId}): ${reason}`);
-    readyFlags.set(clientId, false);
-    sessionStatus.set(clientId, 'disconnected');
+  console.warn(`🔌 Disconnected (${clientId}): ${reason}`);
+  readyFlags.set(clientId, false);
+  sessionStatus.set(clientId, 'disconnected');
 
-    await ClientModel.updateOne(
-      { clientId },
-      { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: reason } }
-    ).catch(() => null);
+  await ClientModel.updateOne(
+    { clientId },
+    { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: reason } }
+  ).catch(() => null);
 
-    if (reason === 'LOGOUT' || reason === 'NAVIGATION') {
-      try { await client.destroy(); } catch {}
-      clients.delete(clientId);
-      qrCodes.delete(clientId);
-      readyFlags.delete(clientId);
-      sessionStatus.delete(clientId);
-    }
-  });
+  if (reason === 'LOGOUT' || reason === 'NAVIGATION') {
+    try { await client.destroy(); } catch {}
+    clients.delete(clientId);
+    qrCodes.delete(clientId);
+    readyFlags.delete(clientId);
+    sessionStatus.delete(clientId);
+  }
+});
+
 
   client.initialize();
   clients.set(clientId, client);

@@ -19,7 +19,6 @@ router.get('/:clientId', async (req, res) => {
       return res.json({ status: 'pending', qr: null, message: '⏳ QR generating...' });
     }
 
-    console.log(qr);
     // ✅ Emit QR again via Socket.IO
     global.io?.to(clientId).emit('qr', { qr });
 
