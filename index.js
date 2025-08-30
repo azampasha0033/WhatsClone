@@ -39,7 +39,7 @@ import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/ge
 import contactsImportRoute from './routes/contacts-import.js';  
 import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.js';
 import scheduleMessageRoute from './routes/scheduleMessage.js';
-
+import flowRoutes from "./routes/flow.routes.js";  // Import your flow routes
 
 
 // import usersList from './routes/users-list.js';
@@ -74,13 +74,13 @@ app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd
 app.use('/import-contacts', contactsImportRoute);  // Register the route
 // API routes
 app.use("/upload", uploadRouter);
-
 app.use('/api', subscribeRoutes);
 app.use('/subscriptions', subscriptionsStatusRoute);
 app.use('/subscriptions', subscriptionDetailsRouter);
-
 app.use('/auth', authRoute);
 app.use(getApiKeyRoute);
+
+app.use("/api/flows", flowRoutes);  // Register flow-related routes
 
 // API routes
 app.use('/qr', qrRoute);
