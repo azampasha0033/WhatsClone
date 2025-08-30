@@ -97,7 +97,6 @@ function getClient(clientId) {
     readyFlags.set(clientId, false);
 
     if (!qrLogged) {
-      console.log(qrLogged);
       console.log(`📸 QR received for ${clientId}`);
       qrLogged = true;
     }
