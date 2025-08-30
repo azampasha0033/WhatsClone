@@ -77,17 +77,17 @@ function getClient(clientId) {
       dataPath: sessionsPath,
       clientId,
     }),
-    puppeteer: {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-extensions',
-         '--no-zygote',
-        '--single-process'
-      ],
-    },
+   puppeteer: {
+  headless: false,  // Set to false for debugging
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-extensions',
+    '--no-zygote',
+    '--single-process'
+  ],
+},
   });
 
   /* --------------------------------- QR Code -------------------------------- */
