@@ -115,41 +115,22 @@ function getClient(clientId) {
 
 // 🔄 Force chat sync if client is already connected
 client.on('authenticated', async () => {
-  console.log('trying to authenticate....');
   try {
-    console.log('try  to authenticate....');
-
-    // Wait briefly to stabilize the session before proceeding
+    // give it a short delay so WA session is stable
     setTimeout(async () => {
-      console.log('tasync Function ry to authenticate....');
-      
       if (readyFlags.get(clientId)) {
-        console.log('Client is ready, fetching chats...');
-        try {
-          const chats = await client.getChats();
-          console.log(`Fetched ${chats.length} chats.`);
-          
-          for (const chat of chats) {
-            await saveChat(clientId, chat);
-          }
-          console.log(`🔄 Forced sync for already-connected client ${clientId}`);
-        } catch (err) {
-          console.error(`❌ Error fetching chats for ${clientId}:`, err.message);
+        const chats = await client.getChats();
+        for (const chat of chats) {
+          await saveChat(clientId, chat);
         }
-      } else {
-        console.log('Else Function ry to authenticate....');
-        console.log('Client is not ready yet. Waiting...');
+        console.log(`🔄 Forced sync for already-connected client ${clientId}`);
       }
-    }, 3000);  // Delay to stabilize the session
+    }, 3000);
   } catch (err) {
     console.error(`❌ Forced sync failed for ${clientId}:`, err.message);
   }
 });
 
-
-client.on('auth_failure', (message) => {
-  console.error(`❌ Authentication failed for ${clientId}: ${message}`);
-});
 
   /* ---------------------------------- Ready --------------------------------- */
   client.on('ready', async () => {
