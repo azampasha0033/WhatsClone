@@ -114,13 +114,22 @@ function getClient(clientId) {
   });
 
 // 🔄 Force chat sync if client is already connected
-
-  client.on('authenticated', () => {
-    console.log(`🔐 Authenticated: ${clientId}`);
-  });
-
-
-
+client.on('authenticated', async () => {
+  try {
+    // give it a short delay so WA session is stable
+    setTimeout(async () => {
+      if (readyFlags.get(clientId)) {
+        const chats = await client.getChats();
+        for (const chat of chats) {
+          await saveChat(clientId, chat);
+        }
+        console.log(`🔄 Forced sync for already-connected client ${clientId}`);
+      }
+    }, 3000);
+  } catch (err) {
+    console.error(`❌ Forced sync failed for ${clientId}:`, err.message);
+  }
+});
 
 
   /* ---------------------------------- Ready --------------------------------- */
