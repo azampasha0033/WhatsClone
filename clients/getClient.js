@@ -10,6 +10,11 @@ import { PollVote } from '../models/PollVote.js';
 import { saveChat } from '../services/chatService.js';
 import { saveMessage } from '../services/messageService.js';
 //import { startBotCall } from "../services/botCall.js";
+import { flowService } from './services/flowService.js';
+import { userFlowService } from './services/userFlowService.js';
+import { Template } from './models/Template.js';
+
+
 
 import fs from 'fs';
 import path from 'path';
@@ -402,43 +407,98 @@ if(sent){
 
 
   /* ------------------------------- New Message ------------------------------ */
-  client.on('message', async (msg) => {
-    try {
+ client.on('message', async (msg) => {
+  try {
+    await saveMessage(clientId, msg);
 
-       await saveMessage(clientId, msg);
+    const messageData = {
+      id: msg.id._serialized,
+      from: msg.from,
+      to: msg.to,
+      timestamp: msg.timestamp,
+      body: msg.body,
+      type: msg.type,
+      hasMedia: msg.hasMedia,
+      ack: msg.ack
+    };
 
-      const messageData = {
-        id: msg.id._serialized,
-        from: msg.from,
-        to: msg.to,
-        timestamp: msg.timestamp,
-        body: msg.body,
-        type: msg.type,
-        hasMedia: msg.hasMedia,
-        ack: msg.ack
-      };
+    global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
 
-      global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+    // --- Handle Chat Update ---
+    const chat = await msg.getChat();
+    const chatData = {
+      id: chat.id._serialized,
+      name: chat.name,
+      isGroup: chat.isGroup,
+      unreadCount: chat.unreadCount,
+      lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
+      timestamp: chat.timestamp
+    };
+    global.io?.to(clientId).emit('chat-updated', chatData);
 
-      const chat = await msg.getChat();
-      const chatData = {
-        id: chat.id._serialized,
-        name: chat.name,
-        isGroup: chat.isGroup,
-        unreadCount: chat.unreadCount,
-        lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
-        timestamp: chat.timestamp
-      };
-      global.io?.to(clientId).emit('chat-updated', chatData);
+    // --- Handle Flow ---
+    const flows = await flowService.getFlowsByClient(clientId);
+    if (!flows || flows.length === 0) return; // No flow for this client
 
-    } catch (err) {
-      console.error(`❌ Error in message handler for ${clientId}:`, err.message);
+    // For simplicity, pick the first flow. You can extend to multiple flows.
+    const flow = flows[0];
+
+    // Check if user has a current node in this flow
+    let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
+
+    if (!userState) {
+      // User is new → start at the first node
+      const firstNode = flow.nodes[0]; // assuming first node is entry
+      userState = await userFlowService.createUserState(clientId, msg.from, flow._id, firstNode.id);
     }
 
-  
+    // Get the current node
+    const currentNode = flow.nodes.find(n => n.id === userState.currentNodeId);
+    if (!currentNode) return;
+
+    // --- Decide next node based on edges ---
+    const outgoingEdges = flow.edges.filter(e => e.source === currentNode.id);
+
+    // Match the edge based on user message body (keyword)
+    let nextNodeId = null;
+    for (const edge of outgoingEdges) {
+      if (!edge.condition || msg.body.toLowerCase().includes(edge.condition.toLowerCase())) {
+        nextNodeId = edge.target;
+        break;
+      }
+    }
+
+    if (!nextNodeId && outgoingEdges.length === 1) {
+      // fallback: if only one edge, follow it
+      nextNodeId = outgoingEdges[0].target;
+    }
+
+    if (!nextNodeId) return; // no matching edge
+
+    const nextNode = flow.nodes.find(n => n.id === nextNodeId);
+    if (!nextNode) return;
+
+    // --- Send Response if template ---
+    if (nextNode.type === 'template' && nextNode.data.templateId) {
+      const template = await Template.findById(nextNode.data.templateId);
+      if (template) {
+        await client.sendMessage(msg.from, template.body); // send template message
+      }
+    } else if (nextNode.type === 'text' && nextNode.data.text) {
+      await client.sendMessage(msg.from, nextNode.data.text); // send custom text
+    }
+
+    // --- Update user state ---
+    await userFlowService.updateUserState(userState._id, nextNode.id);
+
+  } catch (err) {
+    console.error(`❌ Error in message handler for ${clientId}:`, err.message);
+  }
+});
 
 
-  });
+
+
 
   /* --------------------------- Poll vote --------------------------- */
   client.on('vote_update', async (vote) => {
