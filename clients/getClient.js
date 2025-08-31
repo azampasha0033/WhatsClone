@@ -415,11 +415,10 @@ client.on('message', async (msg) => {
   try {
     console.log('📨 New message received from:', msg.from, 'Body:', msg.body);
 
-    // --- Save incoming message ---
     await saveMessage(clientId, msg);
     console.log('💾 Message saved successfully');
 
-    // --- Emit message to frontend ---
+    // Emit message to frontend
     const messageData = {
       id: msg.id._serialized,
       from: msg.from,
@@ -431,118 +430,56 @@ client.on('message', async (msg) => {
       ack: msg.ack
     };
     global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
-    console.log('🌐 Emitted new-message event');
 
-    // --- Update chat info ---
-    const chat = await msg.getChat();
-    const chatData = {
-      id: chat.id._serialized,
-      name: chat.name,
-      isGroup: chat.isGroup,
-      unreadCount: chat.unreadCount,
-      lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
-      timestamp: chat.timestamp
-    };
-    global.io?.to(clientId).emit('chat-updated', chatData);
-    console.log('🌐 Emitted chat-updated event');
-
-    // --- Fetch flows ---
     const flows = await flowService.getFlows(clientId);
-    console.log('🛠 Flows fetched for client:', flows.length);
-    if (!flows || flows.length === 0) {
-      console.log('⚠️ No flows for this client, exiting handler');
-      return;
-    }
+    if (!flows || flows.length === 0) return;
 
     const flow = flows[0];
-    console.log('➡️ Using flow:', flow._id);
 
-    // --- Get or create user state dynamically based on message ---
+    // --- Find trigger node that matches current message ---
+    const triggerNode = flow.nodes.find(n =>
+      n.type === 'trigger' &&
+      n.data.config.keywords.some(kw =>
+        msg.body.toLowerCase().includes(kw.toLowerCase())
+      )
+    );
+
+    if (!triggerNode) {
+      console.log('⚠️ No matching trigger found, ignoring message');
+      return;
+    }
+
+    console.log('➡️ Trigger node matched:', triggerNode.id);
+
+    // --- Create or update user state to this trigger node ---
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
-
     if (!userState) {
-      // Find the trigger node that matches the message
-      const triggerNode = flow.nodes.find(n =>
-        n.type === 'trigger' &&
-        n.data.config.keywords.some(kw => msg.body.toLowerCase().includes(kw.toLowerCase()))
-      );
-
-      if (triggerNode) {
-        userState = await userFlowService.createUserState(
-          clientId,
-          msg.from,
-          flow._id,
-          triggerNode.id
-        );
-        console.log('🆕 Created user state at trigger node:', triggerNode.id);
-      } else {
-        console.log('⚠️ No matching trigger found for message, ignoring');
-        return;
-      }
+      userState = await userFlowService.createUserState(clientId, msg.from, flow._id, triggerNode.id);
+    } else {
+      // Update current node to matched trigger
+      await userFlowService.updateUserState(userState._id, triggerNode.id);
     }
 
-    // --- Get current node ---
-    let currentNode = flow.nodes.find(n => n.id === userState.currentNodeId);
-    if (!currentNode) {
-      console.log('⚠️ Current node not found, exiting');
-      return;
-    }
-    console.log('🔹 Current node:', currentNode.id);
-
-    // --- Determine next node ---
-    const outgoingEdges = flow.edges.filter(e => e.source === currentNode.id);
-    console.log('🔹 Outgoing edges for current node:', outgoingEdges);
-
-    let nextNodeId = null;
-    for (const edge of outgoingEdges) {
-      if (!edge.condition || msg.body.toLowerCase().includes(edge.condition.toLowerCase())) {
-        nextNodeId = edge.target;
-        console.log('➡️ Matching edge found:', edge);
-        break;
-      } else {
-        console.log('❌ Edge condition not matched:', edge.condition);
-      }
-    }
-
-    // --- Fallback if only one edge exists ---
-    if (!nextNodeId && outgoingEdges.length === 1) {
-      nextNodeId = outgoingEdges[0].target;
-      console.log('⚠️ No edge matched, using single-edge fallback:', nextNodeId);
-    }
-
-    if (!nextNodeId) {
-      console.log('⚠️ No matching edge found, exiting');
+    // --- Get next node based on edges ---
+    const outgoingEdges = flow.edges.filter(e => e.source === triggerNode.id);
+    if (outgoingEdges.length === 0) {
+      console.log('⚠️ Trigger has no outgoing edges, exiting');
       return;
     }
 
+    const nextNodeId = outgoingEdges[0].target; // always take first edge for now
     const nextNode = flow.nodes.find(n => n.id === nextNodeId);
-    if (!nextNode) {
-      console.log('⚠️ Next node not found, exiting');
-      return;
-    }
-    console.log('➡️ Next node:', nextNode.id);
+    if (!nextNode) return;
 
-    // --- Send response ---
-    if (nextNode.type === 'template' && nextNode.data.templateId) {
+    // --- Send message ---
+    if (nextNode.type === 'action' && nextNode.data.type === 'send_message') {
+      await client.sendMessage(msg.from, nextNode.data.config.message);
+      console.log('📤 Text message sent:', nextNode.data.config.message);
+    } else if (nextNode.type === 'template' && nextNode.data.templateId) {
       const template = await Template.findById(nextNode.data.templateId);
       if (template) {
         await client.sendMessage(msg.from, template.body);
         console.log('📤 Template message sent:', template.body);
-      }
-    } else if (nextNode.type === 'action') {
-      const { type: actionType, config } = nextNode.data;
-
-      if (actionType === 'send_message' && config.message) {
-        await client.sendMessage(msg.from, config.message);
-        console.log('📤 Text message sent:', config.message);
-      } else if (actionType === 'send_message' && config.templateId) {
-        const template = await Template.findById(config.templateId);
-        if (template) {
-          await client.sendMessage(msg.from, template.body);
-          console.log('📤 Template message sent:', template.body);
-        }
-      } else {
-        console.log('⚠️ Action type not recognized or empty message');
       }
     }
 
@@ -551,9 +488,10 @@ client.on('message', async (msg) => {
     console.log('✅ User state updated');
 
   } catch (err) {
-    console.error(`❌ Error in message handler for ${clientId}:`, err.message);
+    console.error('❌ Message handler error:', err);
   }
 });
+
 
 
 
