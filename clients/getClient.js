@@ -430,8 +430,11 @@ client.on('message', async (msg) => {
       hasMedia: msg.hasMedia,
       ack: msg.ack
     };
-      global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+   
 
+
+       global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+       
     // Fetch flows for client
     const flows = await flowService.getFlows(clientId);
     if (!flows || flows.length === 0) return;
