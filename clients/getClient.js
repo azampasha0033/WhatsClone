@@ -471,7 +471,7 @@ client.on('message', async (msg) => {
     }
 
     // --- Determine next node ---
-    let nextNode: any = null;
+    let nextNode = null;
 
     switch (currentNode.type) {
       case 'trigger':
