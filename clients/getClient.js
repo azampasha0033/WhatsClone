@@ -430,69 +430,105 @@ client.on('message', async (msg) => {
       hasMedia: msg.hasMedia,
       ack: msg.ack
     };
-    global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+   
 
     // Fetch flows for client
     const flows = await flowService.getFlows(clientId);
     if (!flows || flows.length === 0) return;
     const flow = flows[0];
 
-    // --- Find trigger node that matches message ---
-    const triggerNode = flow.nodes.find(n =>
-      n.type === 'trigger' &&
-      n.data.config.keywords.some(kw =>
-        msg.body.toLowerCase().includes(kw.toLowerCase())
-      )
-    );
-
-    if (!triggerNode) {
-      console.log('⚠️ No matching trigger found, ignoring message');
-      return;
-    }
-
-    console.log('➡️ Trigger node matched:', triggerNode.id);
-
-    // --- Create or update user state ---
+    // --- Get or create user state ---
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
     if (!userState) {
+      // Find matching trigger node
+      const triggerNode = flow.nodes.find(n =>
+        n.type === 'trigger' &&
+        n.data.config.keywords.some(kw =>
+          msg.body.toLowerCase().includes(kw.toLowerCase())
+        )
+      );
+
+      if (!triggerNode) {
+        console.log('⚠️ No matching trigger found, ignoring message');
+        return;
+      }
+
       userState = await userFlowService.createUserState(clientId, msg.from, flow._id, triggerNode.id);
-    } else {
-      await userFlowService.updateUserState(userState._id, triggerNode.id);
+      console.log('➡️ Trigger node matched:', triggerNode.id);
     }
 
-    // --- Get next node based on outgoing edge ---
-    const outgoingEdge = flow.edges.find(e => e.source === triggerNode.id);
-    if (!outgoingEdge) {
-      console.log('⚠️ Trigger has no outgoing edges, exiting');
-      return;
+    // --- Get current node ---
+    let currentNode = flow.nodes.find(n => n.id === userState.currentNodeId);
+    if (!currentNode) {
+      console.log('⚠️ Current node not found, resetting to first trigger');
+      const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+      if (!firstTrigger) return;
+      currentNode = firstTrigger;
+      await userFlowService.updateUserState(userState._id, currentNode.id);
     }
 
-    const nextNode = flow.nodes.find(n => n.id === outgoingEdge.target);
+    // --- Determine next node ---
+    let nextNode = null;
+
+    switch (currentNode.type) {
+      case 'trigger':
+      case 'action':
+      case 'send_message':
+      case 'template':
+        // follow first outgoing edge
+        const outgoingEdge = flow.edges.find(e => e.source === currentNode.id);
+        if (!outgoingEdge) {
+          console.log('⚠️ Node has no outgoing edge, exiting');
+          return;
+        }
+        nextNode = flow.nodes.find(n => n.id === outgoingEdge.target);
+        break;
+
+      case 'wait_for_reply':
+        // go to next node after wait
+        const waitEdge = flow.edges.find(e => e.source === currentNode.id);
+        if (!waitEdge) return;
+        nextNode = flow.nodes.find(n => n.id === waitEdge.target);
+        break;
+
+      case 'route_by_keyword':
+        const msgLower = msg.body.toLowerCase();
+        const route = currentNode.data.routes.find(r =>
+          r.keywords.some(kw => msgLower.includes(kw.toLowerCase()))
+        );
+        const nextNodeId = route ? route.next : currentNode.data.fallbackNext;
+        nextNode = flow.nodes.find(n => n.id === nextNodeId);
+        break;
+
+      case 'end':
+        console.log('✅ Conversation ended:', currentNode.data.reason || 'No reason');
+        return;
+    }
+
     if (!nextNode) return;
 
-    // --- Handle sending message or template ---
-    if (nextNode.type === 'action' && nextNode.data.type === 'send_message') {
-      await client.sendMessage(msg.from, nextNode.data.config.message);
-      console.log('📤 Text message sent:', nextNode.data.config.message);
-
+    // --- Send message or template ---
+    if (nextNode.type === 'send_message' || (nextNode.type === 'action' && nextNode.data.type === 'send_message')) {
+      await client.sendMessage(msg.from, nextNode.data.message || nextNode.data.config?.message || '');
+      console.log('📤 Text message sent:', nextNode.data.message || nextNode.data.config?.message);
     } else if (nextNode.type === 'template' && nextNode.data.config.templateId) {
-      console.log('its in the template hamza');
-  // fetch template text from DB
-  const template = await Template.findById(nextNode.data.config.templateId);
-  if (template) {
-    await client.sendMessage(msg.from, template.body); // send as normal text
-    console.log('📤 Template message sent (as text):', template.body);
-  }
-}
-
+      const template = await Template.findById(nextNode.data.config.templateId);
+      if (template) {
+        await client.sendMessage(msg.from, template.body); // send template as text
+        console.log('📤 Template message sent (as text):', template.body);
+      }
+    }
 
     // --- Update user state to next node ---
     await userFlowService.updateUserState(userState._id, nextNode.id);
-    console.log('✅ User state updated');
+    console.log('✅ User state updated to:', nextNode.id);
 
   } catch (err) {
     console.error('❌ Message handler error:', err);
   }
+
+   global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+   
 });
 
 
