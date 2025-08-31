@@ -405,15 +405,16 @@ if(sent){
   /* ------------------------------- Chat Update ------------------------------ */
 
  /* ------------------------------- New Message ------------------------------ */
+/* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
     console.log('📨 New message received from:', msg.from, 'Body:', msg.body);
 
-    // Save message
+    // --- Save message ---
     await saveMessage(clientId, msg);
     console.log('💾 Message saved successfully');
 
-    // Emit message to frontend
+    // --- Emit message to frontend ---
     const messageData = {
       id: msg.id._serialized,
       from: msg.from,
@@ -426,7 +427,7 @@ client.on('message', async (msg) => {
     };
     global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
 
-    // Fetch flows for client
+    // --- Fetch flows for client ---
     const flows = await flowService.getFlows(clientId);
     if (!flows || flows.length === 0) return;
     const flow = flows[0];
@@ -450,70 +451,14 @@ client.on('message', async (msg) => {
       }
 
       console.log('➡️ Flow restarted at trigger:', firstTrigger.id);
-    }
 
-    // --- Recursive function to advance nodes ---
-    async function advanceNode(node) {
-      if (!node) return null;
-
-      let nextNode = null;
-
-      switch (node.type) {
-        case 'trigger':
-        case 'action':
-        case 'send_message':
-        case 'template':
-          // Send current node if needed
-          await sendNodeMessage(node, msg.from);
-
-          // Follow first outgoing edge
-          const outgoingEdge = flow.edges.find(e => e.source === node.id);
-          if (!outgoingEdge) return null;
-          nextNode = flow.nodes.find(n => n.id === outgoingEdge.target);
-
-          // Recursively advance if next node is send_message/action/template
-          if (nextNode && ['send_message', 'action', 'template'].includes(nextNode.type)) {
-            await userFlowService.updateUserState(userState._id, nextNode.id);
-            return advanceNode(nextNode);
-          }
-          break;
-
-        case 'wait_for_reply':
-          nextNode = node; // stop here, wait for user reply
-          break;
-
-        case 'route_by_keyword':
-          const msgLower = msg.body.toLowerCase();
-          const route = node.data.routes.find(r =>
-            r.keywords.some(kw => msgLower.includes(kw.toLowerCase()))
-          );
-          const nextNodeId = route ? route.next : node.data.fallbackNext;
-          nextNode = flow.nodes.find(n => n.id === nextNodeId);
-          break;
-
-        case 'end':
-          console.log('✅ Conversation ended:', node.data.reason || 'No reason');
-          return null;
+      // Send welcome message
+      if (firstTrigger.data?.message) {
+        await client.sendMessage(msg.from, firstTrigger.data.message);
+        console.log('📤 Text message sent:', firstTrigger.data.message);
       }
 
-      return nextNode;
-    }
-
-    // --- Function to send message or template ---
-    async function sendNodeMessage(node, to) {
-      if (node.type === 'send_message' || (node.type === 'action' && node.data.type === 'send_message')) {
-        const message = node.data.message || node.data.config?.message || '';
-        if (message) {
-          await client.sendMessage(to, message);
-          console.log('📤 Text message sent:', message);
-        }
-      } else if (node.type === 'template' && node.data.config?.templateId) {
-        const template = await Template.findById(node.data.config.templateId);
-        if (template) {
-          await client.sendMessage(to, template.body);
-          console.log('📤 Template message sent (as text):', template.body);
-        }
-      }
+      return; // Wait for next user message
     }
 
     // --- Get current node ---
@@ -525,20 +470,70 @@ client.on('message', async (msg) => {
       await userFlowService.updateUserState(userState._id, currentNode.id);
     }
 
-    // --- Advance nodes automatically until wait_for_reply ---
-    const nextNode = await advanceNode(currentNode);
+    // --- Determine next node ---
+    let nextNode: any = null;
 
-    // --- Update user state if waiting for reply ---
-    if (nextNode && nextNode.type === 'wait_for_reply') {
-      await userFlowService.updateUserState(userState._id, nextNode.id);
-      console.log('⏳ Waiting for user reply at node:', nextNode.id);
+    switch (currentNode.type) {
+      case 'trigger':
+      case 'action':
+      case 'send_message':
+      case 'template':
+        const outgoingEdge = flow.edges.find(e => e.source === currentNode.id);
+        if (!outgoingEdge) return;
+        nextNode = flow.nodes.find(n => n.id === outgoingEdge.target);
+        break;
+
+      case 'wait_for_reply':
+        const userInput = msg.body.toLowerCase().trim();
+
+        // Match keywords in the current node
+        const route = currentNode.data.routes.find(r =>
+          r.keywords.some(kw => userInput.includes(kw.toLowerCase()))
+        );
+
+        const nextNodeId = route ? route.next : currentNode.data.fallbackNext;
+        nextNode = flow.nodes.find(n => n.id === nextNodeId);
+        break;
+
+      case 'route_by_keyword':
+        const msgLower = msg.body.toLowerCase().trim();
+        const routeNode = currentNode.data.routes.find(r =>
+          r.keywords.some(kw => msgLower.includes(kw.toLowerCase()))
+        );
+        const nextNodeIdRoute = routeNode ? routeNode.next : currentNode.data.fallbackNext;
+        nextNode = flow.nodes.find(n => n.id === nextNodeIdRoute);
+        break;
+
+      case 'end':
+        if (!isRestart) {
+          console.log('✅ Conversation ended:', currentNode.data.reason || 'No reason');
+          return;
+        }
+        break;
     }
+
+    if (!nextNode) return;
+
+    // --- Send message or template ---
+    if (nextNode.type === 'send_message' || (nextNode.type === 'action' && nextNode.data.type === 'send_message')) {
+      await client.sendMessage(msg.from, nextNode.data.message || nextNode.data.config?.message || '');
+      console.log('📤 Text message sent:', nextNode.data.message || nextNode.data.config?.message);
+    } else if (nextNode.type === 'template' && nextNode.data.config.templateId) {
+      const template = await Template.findById(nextNode.data.config.templateId);
+      if (template) {
+        await client.sendMessage(msg.from, template.body);
+        console.log('📤 Template message sent (as text):', template.body);
+      }
+    }
+
+    // --- Update user state ---
+    await userFlowService.updateUserState(userState._id, nextNode.id);
+    console.log('✅ User state updated to:', nextNode.id);
 
   } catch (err) {
     console.error('❌ Message handler error:', err);
   }
 });
-
 
 
 
