@@ -430,7 +430,7 @@ client.on('message', async (msg) => {
       hasMedia: msg.hasMedia,
       ack: msg.ack
     };
-   
+      global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
 
     // Fetch flows for client
     const flows = await flowService.getFlows(clientId);
@@ -527,7 +527,7 @@ client.on('message', async (msg) => {
     console.error('❌ Message handler error:', err);
   }
 
-   global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+
    
 });
 
