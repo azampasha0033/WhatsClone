@@ -475,14 +475,24 @@ client.on('message', async (msg) => {
 
     // --- Determine next node ---
     const outgoingEdges = flow.edges.filter(e => e.source === currentNode.id);
+    console.log('🔹 Outgoing edges for current node:', outgoingEdges);
+
     let nextNodeId = null;
     for (const edge of outgoingEdges) {
       if (!edge.condition || msg.body.toLowerCase().includes(edge.condition.toLowerCase())) {
         nextNodeId = edge.target;
+        console.log('➡️ Matching edge found:', edge);
         break;
+      } else {
+        console.log('❌ Edge condition not matched:', edge.condition);
       }
     }
-    if (!nextNodeId && outgoingEdges.length === 1) nextNodeId = outgoingEdges[0].target;
+
+    // --- Fallback if no matching edge ---
+    if (!nextNodeId && outgoingEdges.length === 1) {
+      nextNodeId = outgoingEdges[0].target;
+      console.log('⚠️ No edge matched, using single-edge fallback:', nextNodeId);
+    }
 
     if (!nextNodeId) {
       console.log('⚠️ No matching edge found, exiting');
@@ -516,9 +526,6 @@ client.on('message', async (msg) => {
     console.error(`❌ Error in message handler for ${clientId}:`, err.message);
   }
 });
-
-
-
 
 
 
