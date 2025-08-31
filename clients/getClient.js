@@ -457,14 +457,19 @@ client.on('message', async (msg) => {
     console.log('➡️ Using flow:', flow._id);
 
     // --- Get or create user state ---
-    let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
-    if (!userState) {
-      console.log('🆕 User is new, creating user state');
-      const firstNode = flow.nodes[0];
-      userState = await userFlowService.createUserState(clientId, msg.from, flow._id, firstNode.id);
-    } else {
-      console.log('👤 Existing user state found:', userState._id);
+   // Before processing message
+let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
+if (!userState) {
+    const firstNode = flow.nodes[0]; // trigger node
+    userState = await userFlowService.createUserState(clientId, msg.from, flow._id, firstNode.id);
+} else if (userState.currentNodeId.startsWith('action')) {
+    // Optional: reset to trigger node for testing
+    const triggerNode = flow.nodes.find(n => n.type === 'trigger');
+    if (triggerNode) {
+        await userFlowService.updateUserState(userState._id, triggerNode.id);
+        userState.currentNodeId = triggerNode.id;
     }
+}
 
     const currentNode = flow.nodes.find(n => n.id === userState.currentNodeId);
     if (!currentNode) {
