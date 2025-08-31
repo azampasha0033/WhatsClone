@@ -410,7 +410,6 @@ if(sent){
 
 
   /* ------------------------------- New Message ------------------------------ */
-/* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
     console.log('📨 New message received from:', msg.from, 'Body:', msg.body);
@@ -430,11 +429,8 @@ client.on('message', async (msg) => {
       hasMedia: msg.hasMedia,
       ack: msg.ack
     };
-   
+    global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
 
-
-       global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
-       
     // Fetch flows for client
     const flows = await flowService.getFlows(clientId);
     if (!flows || flows.length === 0) return;
@@ -442,28 +438,28 @@ client.on('message', async (msg) => {
 
     // --- Get or create user state ---
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
-    if (!userState) {
-      // Find matching trigger node
-      const triggerNode = flow.nodes.find(n =>
-        n.type === 'trigger' &&
-        n.data.config.keywords.some(kw =>
-          msg.body.toLowerCase().includes(kw.toLowerCase())
-        )
-      );
 
-      if (!triggerNode) {
-        console.log('⚠️ No matching trigger found, ignoring message');
-        return;
+    // --- Check if user wants to restart flow ---
+    const restartKeywords = ['hi', 'hello', 'start', 'hey'];
+    const isRestart = restartKeywords.some(k => msg.body.toLowerCase().includes(k));
+
+    if (!userState || isRestart) {
+      // Reset user state to first trigger
+      const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+      if (!firstTrigger) return;
+
+      if (!userState) {
+        userState = await userFlowService.createUserState(clientId, msg.from, flow._id, firstTrigger.id);
+      } else {
+        await userFlowService.updateUserState(userState._id, firstTrigger.id);
       }
 
-      userState = await userFlowService.createUserState(clientId, msg.from, flow._id, triggerNode.id);
-      console.log('➡️ Trigger node matched:', triggerNode.id);
+      console.log('➡️ Flow restarted at trigger:', firstTrigger.id);
     }
 
     // --- Get current node ---
     let currentNode = flow.nodes.find(n => n.id === userState.currentNodeId);
     if (!currentNode) {
-      console.log('⚠️ Current node not found, resetting to first trigger');
       const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
       if (!firstTrigger) return;
       currentNode = firstTrigger;
@@ -478,17 +474,12 @@ client.on('message', async (msg) => {
       case 'action':
       case 'send_message':
       case 'template':
-        // follow first outgoing edge
         const outgoingEdge = flow.edges.find(e => e.source === currentNode.id);
-        if (!outgoingEdge) {
-          console.log('⚠️ Node has no outgoing edge, exiting');
-          return;
-        }
+        if (!outgoingEdge) return;
         nextNode = flow.nodes.find(n => n.id === outgoingEdge.target);
         break;
 
       case 'wait_for_reply':
-        // go to next node after wait
         const waitEdge = flow.edges.find(e => e.source === currentNode.id);
         if (!waitEdge) return;
         nextNode = flow.nodes.find(n => n.id === waitEdge.target);
@@ -504,8 +495,12 @@ client.on('message', async (msg) => {
         break;
 
       case 'end':
-        console.log('✅ Conversation ended:', currentNode.data.reason || 'No reason');
-        return;
+        // If not restart, just return
+        if (!isRestart) {
+          console.log('✅ Conversation ended:', currentNode.data.reason || 'No reason');
+          return;
+        }
+        break;
     }
 
     if (!nextNode) return;
@@ -517,22 +512,20 @@ client.on('message', async (msg) => {
     } else if (nextNode.type === 'template' && nextNode.data.config.templateId) {
       const template = await Template.findById(nextNode.data.config.templateId);
       if (template) {
-        await client.sendMessage(msg.from, template.body); // send template as text
+        await client.sendMessage(msg.from, template.body);
         console.log('📤 Template message sent (as text):', template.body);
       }
     }
 
-    // --- Update user state to next node ---
+    // --- Update user state ---
     await userFlowService.updateUserState(userState._id, nextNode.id);
     console.log('✅ User state updated to:', nextNode.id);
 
   } catch (err) {
     console.error('❌ Message handler error:', err);
   }
-
-
-   
 });
+
 
 
 
