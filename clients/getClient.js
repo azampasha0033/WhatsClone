@@ -475,20 +475,16 @@ client.on('message', async (msg) => {
       await client.sendMessage(msg.from, nextNode.data.config.message);
       console.log('📤 Text message sent:', nextNode.data.config.message);
 
-    } else if (nextNode.type === 'template' && nextNode.data.templateId) {
-      // Build WhatsApp template payload
-      const templatePayload = {
-        name: nextNode.data.templateName || nextNode.data.templateId,
-        language: { code: 'en' },
-        components: [] // add dynamic variables here if needed
-      };
+    } else if (nextNode.type === 'template' && nextNode.data.config.templateId) {
+      console.log('its in the template hamza');
+  // fetch template text from DB
+  const template = await Template.findById(nextNode.config.templateId);
+  if (template) {
+    await client.sendMessage(msg.from, template.body); // send as normal text
+    console.log('📤 Template message sent (as text):', template.body);
+  }
+}
 
-      await client.sendMessage(msg.from, {
-        template: templatePayload
-      });
-
-      console.log('📤 Template message sent:', templatePayload.name);
-    }
 
     // --- Update user state to next node ---
     await userFlowService.updateUserState(userState._id, nextNode.id);
