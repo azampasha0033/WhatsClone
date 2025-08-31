@@ -404,7 +404,6 @@ if(sent){
 
   /* ------------------------------- Chat Update ------------------------------ */
 
- /* ------------------------------- New Message ------------------------------ */
 /* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
@@ -432,108 +431,218 @@ client.on('message', async (msg) => {
     if (!flows || flows.length === 0) return;
     const flow = flows[0];
 
+    // Helpers
+    const getNode = (id) => flow.nodes.find(n => n.id === id);
+    const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+    if (!firstTrigger) return;
+
+    const firstOutgoing = (nodeId) => flow.edges.find(e => e.source === nodeId);
+    const outgoingAll   = (nodeId) => flow.edges.filter(e => e.source === nodeId);
+
+    const sendNodeMessage = async (node) => {
+      // send_message
+      if (node.type === 'send_message') {
+        const text = node.data?.message || node.data?.config?.message || '';
+        if (text) {
+          await client.sendMessage(msg.from, text);
+          console.log('📤 Text message sent:', text);
+        }
+        return true;
+      }
+      // template (fallback to text if needed)
+      if (node.type === 'template') {
+        const tplId = node.data?.config?.templateId;
+        if (tplId) {
+          const template = await Template.findById(tplId);
+          if (template?.body) {
+            await client.sendMessage(msg.from, template.body);
+            console.log('📤 Template message sent (as text):', template.body);
+          }
+        }
+        return true;
+      }
+      // action:send_message
+      if (node.type === 'action' && node.data?.type === 'send_message') {
+        const text = node.data?.message || node.data?.config?.message || '';
+        if (text) {
+          await client.sendMessage(msg.from, text);
+          console.log('📤 Action message sent:', text);
+        }
+        return true;
+      }
+      return false;
+    };
+
+    // Advance automatically through non-interactive nodes until we hit wait_for_reply or end.
+    const advanceUntilWaitOrEnd = async (current) => {
+      let node = current;
+
+      while (node) {
+        // If we reached a wait node or end, stop here
+        if (node.type === 'wait_for_reply' || node.type === 'end') {
+          return node;
+        }
+
+        // For trigger/send/template/action, send if applicable, then step to next
+        if (['trigger','send_message','template','action'].includes(node.type)) {
+          // Send when applicable
+          await sendNodeMessage(node);
+
+          // Move to next via the **first** outgoing edge
+          const edge = firstOutgoing(node.id);
+          if (!edge) return node; // nowhere to go
+          node = getNode(edge.target);
+          continue;
+        }
+
+        // For route_by_keyword: we should only arrive here AFTER a user reply, so stop.
+        if (node.type === 'route_by_keyword') {
+          return node;
+        }
+
+        // Unknown: stop defensively
+        return node;
+      }
+
+      return current;
+    };
+
+    // Restart commands (explicit only; do NOT include 'hello')
+    const restartKeywords = [
+      'restart', '/start', 'start', 'menu', 'main menu', 'back to menu'
+    ];
+    const bodyLower = (msg.body || '').toLowerCase().trim();
+    const isRestart = restartKeywords.some(k => bodyLower === k || bodyLower.includes(k));
+
     // --- Get or create user state ---
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
 
-    // --- Check if user wants to restart flow ---
-    const restartKeywords = ['hi', 'hello', 'start', 'hey'];
-    const isRestart = restartKeywords.some(k => msg.body.toLowerCase().includes(k));
+    // Utility to (re)start flow from trigger and land on the first wait node (sending messages en route)
+    const restartFlow = async () => {
+      const startNode = await advanceUntilWaitOrEnd(firstTrigger);
+      await userFlowService.updateUserState(
+        userState?._id || (await userFlowService.createUserState(clientId, msg.from, flow._id, startNode.id))._id,
+        startNode.id
+      );
+      console.log('➡️ Flow restarted at trigger:', firstTrigger.id, '→ current:', startNode.id);
+      return startNode;
+    };
 
-    if (!userState || isRestart) {
-      // Reset user state to first trigger
-      const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
-      if (!firstTrigger) return;
-
-      if (!userState) {
-        userState = await userFlowService.createUserState(clientId, msg.from, flow._id, firstTrigger.id);
-      } else {
-        await userFlowService.updateUserState(userState._id, firstTrigger.id);
-      }
-
-      console.log('➡️ Flow restarted at trigger:', firstTrigger.id);
-
-      // Send welcome message
-      if (firstTrigger.data?.message) {
-        await client.sendMessage(msg.from, firstTrigger.data.message);
-        console.log('📤 Text message sent:', firstTrigger.data.message);
-      }
-
-      return; // Wait for next user message
+    // If no state yet, create and advance to first wait node
+    if (!userState) {
+      const atNode = await restartFlow();
+      // If it’s a wait node, we’re done until the user replies
+      if (atNode.type === 'wait_for_reply') return;
+      // If somehow not a wait node, just stop
+      return;
     }
 
-    // --- Get current node ---
-    let currentNode = flow.nodes.find(n => n.id === userState.currentNodeId);
+    // If explicit restart OR current node is 'end', restart
+    if (isRestart || getNode(userState.currentNodeId)?.type === 'end') {
+      await restartFlow();
+      return;
+    }
+
+    // --- Normal handling ---
+    let currentNode = getNode(userState.currentNodeId);
     if (!currentNode) {
-      const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
-      if (!firstTrigger) return;
-      currentNode = firstTrigger;
+      // state points to nowhere → restart safely
+      currentNode = await restartFlow();
+      if (currentNode.type === 'wait_for_reply') return;
+    }
+
+    // If we are on a "send"/"action"/"trigger" due to some mismatch, advance to the next wait node
+    if (['trigger','send_message','template','action'].includes(currentNode.type)) {
+      currentNode = await advanceUntilWaitOrEnd(currentNode);
       await userFlowService.updateUserState(userState._id, currentNode.id);
-    }
-
-    // --- Determine next node ---
-    let nextNode = null;
-
-    switch (currentNode.type) {
-      case 'trigger':
-      case 'action':
-      case 'send_message':
-      case 'template':
-        const outgoingEdge = flow.edges.find(e => e.source === currentNode.id);
-        if (!outgoingEdge) return;
-        nextNode = flow.nodes.find(n => n.id === outgoingEdge.target);
-        break;
-
-      case 'wait_for_reply':
-        const userInput = msg.body.toLowerCase().trim();
-
-        // Match keywords in the current node
-        const route = currentNode.data.routes.find(r =>
-          r.keywords.some(kw => userInput.includes(kw.toLowerCase()))
-        );
-
-        const nextNodeId = route ? route.next : currentNode.data.fallbackNext;
-        nextNode = flow.nodes.find(n => n.id === nextNodeId);
-        break;
-
-      case 'route_by_keyword':
-        const msgLower = msg.body.toLowerCase().trim();
-        const routeNode = currentNode.data.routes.find(r =>
-          r.keywords.some(kw => msgLower.includes(kw.toLowerCase()))
-        );
-        const nextNodeIdRoute = routeNode ? routeNode.next : currentNode.data.fallbackNext;
-        nextNode = flow.nodes.find(n => n.id === nextNodeIdRoute);
-        break;
-
-      case 'end':
-        if (!isRestart) {
-          console.log('✅ Conversation ended:', currentNode.data.reason || 'No reason');
-          return;
-        }
-        break;
-    }
-
-    if (!nextNode) return;
-
-    // --- Send message or template ---
-    if (nextNode.type === 'send_message' || (nextNode.type === 'action' && nextNode.data.type === 'send_message')) {
-      await client.sendMessage(msg.from, nextNode.data.message || nextNode.data.config?.message || '');
-      console.log('📤 Text message sent:', nextNode.data.message || nextNode.data.config?.message);
-    } else if (nextNode.type === 'template' && nextNode.data.config.templateId) {
-      const template = await Template.findById(nextNode.data.config.templateId);
-      if (template) {
-        await client.sendMessage(msg.from, template.body);
-        console.log('📤 Template message sent (as text):', template.body);
+      // If that landed us on a wait node, we now wait for user input
+      if (currentNode.type === 'wait_for_reply') {
+        console.log('⏳ Waiting for user reply at node:', currentNode.id);
+        return;
       }
     }
 
-    // --- Update user state ---
-    await userFlowService.updateUserState(userState._id, nextNode.id);
-    console.log('✅ User state updated to:', nextNode.id);
+    // If on a wait node, the *next* node should be the router. Move to it, do NOT consume again.
+    if (currentNode.type === 'wait_for_reply') {
+      const edges = outgoingAll(currentNode.id);
+      // Expect exactly one router next; if more, pick first
+      const routerEdge = edges[0];
+      if (!routerEdge) {
+        console.warn('⚠️ wait_for_reply has no outgoing edges. Staying put.');
+        return;
+      }
+      const routerNode = getNode(routerEdge.target);
+      if (!routerNode || routerNode.type !== 'route_by_keyword') {
+        console.warn('⚠️ wait_for_reply does not lead to route_by_keyword. Staying put.');
+        return;
+      }
+      currentNode = routerNode;
+    }
+
+    // Now we expect currentNode to be a router
+    if (currentNode.type === 'route_by_keyword') {
+      const msgLower = bodyLower;
+      const routes = currentNode.data?.routes || [];
+
+      const matchedRoute = routes.find(r =>
+        (r.keywords || []).some(kw => {
+          const k = String(kw).toLowerCase().trim();
+          // match either exact number or substring for words
+          return (k.length <= 2 ? msgLower === k : msgLower.includes(k));
+        })
+      );
+
+      const nextNodeId = matchedRoute ? matchedRoute.next : currentNode.data?.fallbackNext;
+      let nextNode = nextNodeId ? getNode(nextNodeId) : null;
+
+      if (!nextNode) {
+        // Hard fallback: try a generic help if present; else end
+        const helpNode = flow.nodes.find(n => n.id === 'send-help') || flow.nodes.find(n => n.type === 'send_message');
+        if (helpNode) {
+          await sendNodeMessage(helpNode);
+          await userFlowService.updateUserState(userState._id, helpNode.id);
+          console.log('ℹ️ Fallback help sent.');
+          // After help, try to advance to next wait (if any)
+          const landed = await advanceUntilWaitOrEnd(helpNode);
+          await userFlowService.updateUserState(userState._id, landed.id);
+        } else {
+          const endNode = flow.nodes.find(n => n.type === 'end');
+          if (endNode) {
+            await userFlowService.updateUserState(userState._id, endNode.id);
+          }
+        }
+        return;
+      }
+
+      // If next node sends something, send & advance to the next wait/end automatically
+      const landed = await advanceUntilWaitOrEnd(nextNode);
+      await userFlowService.updateUserState(userState._id, landed.id);
+      if (landed.type === 'wait_for_reply') {
+        console.log('⏳ Waiting for user reply at node:', landed.id);
+      } else if (landed.type === 'end') {
+        console.log('✅ Conversation ended:', landed.data?.reason || 'No reason');
+      }
+      return;
+    }
+
+    // If it’s end, do nothing unless they /start again
+    if (currentNode.type === 'end') {
+      console.log('✅ Conversation ended (idle):', currentNode.data?.reason || 'No reason');
+      return;
+    }
+
+    // Anything else: safely attempt to advance and park
+    const parked = await advanceUntilWaitOrEnd(currentNode);
+    await userFlowService.updateUserState(userState._id, parked.id);
+    if (parked.type === 'wait_for_reply') {
+      console.log('⏳ Waiting for user reply at node:', parked.id);
+    }
 
   } catch (err) {
     console.error('❌ Message handler error:', err);
   }
 });
+
 
 
 
