@@ -14,7 +14,7 @@ import { saveMessage } from '../services/messageService.js';
 
 import { userFlowService } from "../services/userFlowService.js";
 import { flowService } from "../services/flow.service.js";
-import { Template } from "../models/template.js"; // if using templates
+import { Template } from "../models/Template.js"; // if using templates
 
 
 
