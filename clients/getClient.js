@@ -518,10 +518,17 @@ if (!userState) {
         await client.sendMessage(msg.from, template.body);
         console.log('📤 Template message sent:', template.body);
       }
-    } else if (nextNode.type === 'text' && nextNode.data.text) {
-      await client.sendMessage(msg.from, nextNode.data.text);
-      console.log('📤 Text message sent:', nextNode.data.text);
-    }
+    } 
+    if (nextNode.type === 'text' && nextNode.data.text) {
+  await client.sendMessage(msg.from, nextNode.data.text);
+  console.log('📤 Text message sent:', nextNode.data.text);
+}
+
+if (nextNode.type === 'send_message' && nextNode.data.text) {
+  await client.sendMessage(msg.from, nextNode.data.text);
+  console.log('📤 Text message sent:', nextNode.data.text);
+}
+
 
     // --- Update user state ---
     await userFlowService.updateUserState(userState._id, nextNode.id);
