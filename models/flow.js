@@ -22,7 +22,7 @@ const flowSchema = new mongoose.Schema(
   {
     clientId: { type: String, required: true },   // Here we link it to a specific client
     name: { type: String, required: true },
-    status: { type: String, required: true },
+    status: { type: String, required: true, default: "draft" },
     nodes: [nodeSchema],
     edges: [edgeSchema]
   },
