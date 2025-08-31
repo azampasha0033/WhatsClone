@@ -511,38 +511,34 @@ if (!userState) {
     }
     console.log('➡️ Next node:', nextNode.id);
 
-    // --- Send response ---
-    if (nextNode.type === 'template' && nextNode.data.templateId) {
-      const template = await Template.findById(nextNode.data.templateId);
+   // --- Send response based on next node ---
+if (nextNode.type === 'template' && nextNode.data.templateId) {
+  const template = await Template.findById(nextNode.data.templateId);
+  if (template) {
+    await client.sendMessage(msg.from, template.body);
+    console.log('📤 Template message sent:', template.body);
+  }
+} else if (nextNode.type === 'action') {
+  const { type: actionType, config } = nextNode.data;
+
+  if (actionType === 'send_message') {
+    if (config.message) {
+      await client.sendMessage(msg.from, config.message);
+      console.log('📤 Text message sent:', config.message);
+    } else if (config.templateId) {
+      const template = await Template.findById(config.templateId);
       if (template) {
         await client.sendMessage(msg.from, template.body);
         console.log('📤 Template message sent:', template.body);
       }
-    } 
-    if (nextNode.type === 'action' && nextNode.data.text) {
-  await client.sendMessage(msg.from, nextNode.data.text);
-  console.log('📤 Text message sent:', nextNode.data.text);
-}
-
-// --- Send response based on next node ---
-if (nextNode.type === 'action') {
-  const { type: actionType, config } = nextNode.data;
-
-  if (actionType === 'send_message' && config.message) {
-    // Send text message
-    await client.sendMessage(msg.from, config.message);
-    console.log('📤 Text message sent:', config.message);
-  } else if (actionType === 'send_message' && config.templateId) {
-    // Send template message
-    const template = await Template.findById(config.templateId);
-    if (template) {
-      await client.sendMessage(msg.from, template.body);
-      console.log('📤 Template message sent:', template.body);
+    } else {
+      console.log('⚠️ Action type send_message has no message or templateId');
     }
   } else {
-    console.log('⚠️ Action type not recognized or empty message');
+    console.log('⚠️ Action type not recognized:', actionType);
   }
 }
+
 
 
 
