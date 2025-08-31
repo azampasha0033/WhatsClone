@@ -415,6 +415,7 @@ client.on('message', async (msg) => {
   try {
     console.log('📨 New message received from:', msg.from, 'Body:', msg.body);
 
+    // Save message
     await saveMessage(clientId, msg);
     console.log('💾 Message saved successfully');
 
@@ -431,12 +432,12 @@ client.on('message', async (msg) => {
     };
     global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
 
+    // Fetch flows for client
     const flows = await flowService.getFlows(clientId);
     if (!flows || flows.length === 0) return;
-
     const flow = flows[0];
 
-    // --- Find trigger node that matches current message ---
+    // --- Find trigger node that matches message ---
     const triggerNode = flow.nodes.find(n =>
       n.type === 'trigger' &&
       n.data.config.keywords.some(kw =>
@@ -451,36 +452,42 @@ client.on('message', async (msg) => {
 
     console.log('➡️ Trigger node matched:', triggerNode.id);
 
-    // --- Create or update user state to this trigger node ---
+    // --- Create or update user state ---
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
     if (!userState) {
       userState = await userFlowService.createUserState(clientId, msg.from, flow._id, triggerNode.id);
     } else {
-      // Update current node to matched trigger
       await userFlowService.updateUserState(userState._id, triggerNode.id);
     }
 
-    // --- Get next node based on edges ---
-    const outgoingEdges = flow.edges.filter(e => e.source === triggerNode.id);
-    if (outgoingEdges.length === 0) {
+    // --- Get next node based on outgoing edge ---
+    const outgoingEdge = flow.edges.find(e => e.source === triggerNode.id);
+    if (!outgoingEdge) {
       console.log('⚠️ Trigger has no outgoing edges, exiting');
       return;
     }
 
-    const nextNodeId = outgoingEdges[0].target; // always take first edge for now
-    const nextNode = flow.nodes.find(n => n.id === nextNodeId);
+    const nextNode = flow.nodes.find(n => n.id === outgoingEdge.target);
     if (!nextNode) return;
 
-    // --- Send message ---
+    // --- Handle sending message or template ---
     if (nextNode.type === 'action' && nextNode.data.type === 'send_message') {
       await client.sendMessage(msg.from, nextNode.data.config.message);
       console.log('📤 Text message sent:', nextNode.data.config.message);
+
     } else if (nextNode.type === 'template' && nextNode.data.templateId) {
-      const template = await Template.findById(nextNode.data.templateId);
-      if (template) {
-        await client.sendMessage(msg.from, template.body);
-        console.log('📤 Template message sent:', template.body);
-      }
+      // Build WhatsApp template payload
+      const templatePayload = {
+        name: nextNode.data.templateName || nextNode.data.templateId,
+        language: { code: 'en' },
+        components: [] // add dynamic variables here if needed
+      };
+
+      await client.sendMessage(msg.from, {
+        template: templatePayload
+      });
+
+      console.log('📤 Template message sent:', templatePayload.name);
     }
 
     // --- Update user state to next node ---
@@ -491,6 +498,7 @@ client.on('message', async (msg) => {
     console.error('❌ Message handler error:', err);
   }
 });
+
 
 
 
