@@ -478,7 +478,7 @@ client.on('message', async (msg) => {
     } else if (nextNode.type === 'template' && nextNode.data.config.templateId) {
       console.log('its in the template hamza');
   // fetch template text from DB
-  const template = await Template.findById(nextNode.config.templateId);
+  const template = await Template.findById(nextNode.data.config.templateId);
   if (template) {
     await client.sendMessage(msg.from, template.body); // send as normal text
     console.log('📤 Template message sent (as text):', template.body);
