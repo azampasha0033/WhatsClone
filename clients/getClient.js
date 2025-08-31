@@ -93,25 +93,27 @@ function getClient(clientId) {
   /* --------------------------------- QR Code -------------------------------- */
   let qrLogged = false;
   client.on('qr', async (qr) => {
-    if (readyFlags.get(clientId)) return;
-    readyFlags.set(clientId, false);
+  // --- simple demo log (from example)
+  console.log('QR RECEIVED', typeof qr === 'string' ? qr.slice(0, 40) + '…' : qr);
 
-    if (!qrLogged) {
-      console.log(`📸 QR received for ${clientId}`);
-      qrLogged = true;
-    }
+  // (your existing code continues)
+  if (readyFlags.get(clientId)) return;
+  readyFlags.set(clientId, false);
+  if (!qrLogged) {
+    console.log(`📸 QR received for ${clientId}`);
+    qrLogged = true;
+  }
+  const qrData = await qrcode.toDataURL(qr);
+  qrCodes.set(clientId, qrData);
+  sessionStatus.set(clientId, 'pending');
+  global.io?.to(clientId).emit('qr', { qr: qrData });
+  await ClientModel.updateOne(
+    { clientId },
+    { $set: { sessionStatus: 'pending' } }
+  ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
+  console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
+});
 
-    const qrData = await qrcode.toDataURL(qr);
-    qrCodes.set(clientId, qrData);
-    sessionStatus.set(clientId, 'pending');
-    global.io?.to(clientId).emit('qr', { qr: qrData });
-
-    await ClientModel.updateOne(
-      { clientId },
-      { $set: { sessionStatus: 'pending' } }
-    ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
-    console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
-  });
 
 // 🔄 Force chat sync if client is already connected
 client.on('authenticated', async () => {
