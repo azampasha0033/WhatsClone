@@ -56,4 +56,23 @@ router.put("/:flowId/edges", async (req, res) => {
   res.json(flow);
 });
 
+
+// PUT /api/flows/:flowId/toggle-active
+router.put("/:flowId/toggle-active", async (req, res) => {
+  try {
+    // allow clientId from either body or query for consistency
+    const clientId = req.body?.clientId ?? req.query?.clientId;
+    if (!clientId) return res.status(400).json({ error: "clientId is required" });
+
+    const flow = await flowService.toggleActive(clientId, req.params.flowId);
+    if (!flow) return res.status(404).json({ error: "Flow not found" });
+
+    res.json(flow);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+
+
 export default router;

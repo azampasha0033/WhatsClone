@@ -1,5 +1,15 @@
 import { Flow } from "../models/flow.js";
 
+async function toggleActive(clientId, flowId) {
+  const flow = await Flow.findOne({ _id: flowId, clientId });
+  if (!flow) return null;
+
+  // flip between "draft" and "active"
+  flow.status = flow.status === "active" ? "draft" : "active";
+  await flow.save();
+  return flow;
+}
+
 export const flowService = {
   // Create a flow for a specific client
   async createFlow(clientId, name, nodes = [], edges = []) {
@@ -43,5 +53,13 @@ export const flowService = {
       { $set: { edges } },
       { new: true }
     );
+  }, // ✅ Toggle active/draft status
+  async toggleActive(clientId, flowId) {
+    const flow = await Flow.findOne({ _id: flowId, clientId });
+    if (!flow) return null;
+
+    flow.status = flow.status === "active" ? "draft" : "active";
+    await flow.save();
+    return flow;
   }
 };
