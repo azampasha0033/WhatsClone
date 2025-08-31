@@ -11,11 +11,12 @@ import { saveChat } from '../services/chatService.js';
 import { saveMessage } from '../services/messageService.js';
 //import { startBotCall } from "../services/botCall.js";
 
-import { flowService } from '../services/flow.service.js';
-import { userFlowService } from '../services/userFlow.service.js';
+
+import { userFlowService } from "../services/userFlowService.js";
+import { flowService } from "../services/flow.service.js";
+import { Template } from "../models/template.js"; // if using templates
 
 
-import { Template } from './models/Template.js';
 
 
 
