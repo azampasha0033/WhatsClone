@@ -19,7 +19,6 @@ import { Template } from "../models/Template.js"; // if using templates
 
 
 
-
 import fs from 'fs';
 import path from 'path';
 
@@ -411,9 +410,12 @@ if(sent){
 
 
   /* ------------------------------- New Message ------------------------------ */
- client.on('message', async (msg) => {
+client.on('message', async (msg) => {
   try {
+    console.log('📨 New message received from:', msg.from, 'Body:', msg.body);
+
     await saveMessage(clientId, msg);
+    console.log('💾 Message saved successfully');
 
     const messageData = {
       id: msg.id._serialized,
@@ -427,6 +429,7 @@ if(sent){
     };
 
     global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+    console.log('🌐 Emitted new-message event');
 
     // --- Handle Chat Update ---
     const chat = await msg.getChat();
@@ -439,31 +442,39 @@ if(sent){
       timestamp: chat.timestamp
     };
     global.io?.to(clientId).emit('chat-updated', chatData);
+    console.log('🌐 Emitted chat-updated event');
 
     // --- Handle Flow ---
-    const flows = await flowService.getFlowsByClient(clientId);
-    if (!flows || flows.length === 0) return; // No flow for this client
+    const flows = await flowService.getFlows(clientId);
+    console.log('🛠 Flows fetched for client:', flows.length);
 
-    // For simplicity, pick the first flow. You can extend to multiple flows.
-    const flow = flows[0];
-
-    // Check if user has a current node in this flow
-    let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
-
-    if (!userState) {
-      // User is new → start at the first node
-      const firstNode = flow.nodes[0]; // assuming first node is entry
-      userState = await userFlowService.createUserState(clientId, msg.from, flow._id, firstNode.id);
+    if (!flows || flows.length === 0) {
+      console.log('⚠️ No flows for this client, exiting handler');
+      return;
     }
 
-    // Get the current node
+    const flow = flows[0];
+    console.log('➡️ Using flow:', flow._id);
+
+    // --- Get or create user state ---
+    let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
+    if (!userState) {
+      console.log('🆕 User is new, creating user state');
+      const firstNode = flow.nodes[0];
+      userState = await userFlowService.createUserState(clientId, msg.from, flow._id, firstNode.id);
+    } else {
+      console.log('👤 Existing user state found:', userState._id);
+    }
+
     const currentNode = flow.nodes.find(n => n.id === userState.currentNodeId);
-    if (!currentNode) return;
+    if (!currentNode) {
+      console.log('⚠️ Current node not found, exiting');
+      return;
+    }
+    console.log('🔹 Current node:', currentNode.id);
 
-    // --- Decide next node based on edges ---
+    // --- Determine next node ---
     const outgoingEdges = flow.edges.filter(e => e.source === currentNode.id);
-
-    // Match the edge based on user message body (keyword)
     let nextNodeId = null;
     for (const edge of outgoingEdges) {
       if (!edge.condition || msg.body.toLowerCase().includes(edge.condition.toLowerCase())) {
@@ -471,34 +482,41 @@ if(sent){
         break;
       }
     }
+    if (!nextNodeId && outgoingEdges.length === 1) nextNodeId = outgoingEdges[0].target;
 
-    if (!nextNodeId && outgoingEdges.length === 1) {
-      // fallback: if only one edge, follow it
-      nextNodeId = outgoingEdges[0].target;
+    if (!nextNodeId) {
+      console.log('⚠️ No matching edge found, exiting');
+      return;
     }
 
-    if (!nextNodeId) return; // no matching edge
-
     const nextNode = flow.nodes.find(n => n.id === nextNodeId);
-    if (!nextNode) return;
+    if (!nextNode) {
+      console.log('⚠️ Next node not found, exiting');
+      return;
+    }
+    console.log('➡️ Next node:', nextNode.id);
 
-    // --- Send Response if template ---
+    // --- Send response ---
     if (nextNode.type === 'template' && nextNode.data.templateId) {
       const template = await Template.findById(nextNode.data.templateId);
       if (template) {
-        await client.sendMessage(msg.from, template.body); // send template message
+        await client.sendMessage(msg.from, template.body);
+        console.log('📤 Template message sent:', template.body);
       }
     } else if (nextNode.type === 'text' && nextNode.data.text) {
-      await client.sendMessage(msg.from, nextNode.data.text); // send custom text
+      await client.sendMessage(msg.from, nextNode.data.text);
+      console.log('📤 Text message sent:', nextNode.data.text);
     }
 
     // --- Update user state ---
     await userFlowService.updateUserState(userState._id, nextNode.id);
+    console.log('✅ User state updated');
 
   } catch (err) {
     console.error(`❌ Error in message handler for ${clientId}:`, err.message);
   }
 });
+
 
 
 
