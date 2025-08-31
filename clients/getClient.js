@@ -409,8 +409,7 @@ if(sent){
 });
 
 
-  /* ------------------------------- New Message ------------------------------ */
-client.on('message', async (msg) => {
+ client.on('message', async (msg) => {
   try {
     console.log('📨 New message received from:', msg.from, 'Body:', msg.body);
 
@@ -443,64 +442,67 @@ client.on('message', async (msg) => {
     const restartKeywords = ['hi', 'hello', 'start', 'hey'];
     const isRestart = restartKeywords.some(k => msg.body.toLowerCase().includes(k));
 
-    if (!userState || isRestart) {
-      // Reset user state to first trigger
-      const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
-      if (!firstTrigger) return;
+    const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+    if (!firstTrigger) return;
 
+    if (!userState || isRestart) {
       if (!userState) {
         userState = await userFlowService.createUserState(clientId, msg.from, flow._id, firstTrigger.id);
       } else {
         await userFlowService.updateUserState(userState._id, firstTrigger.id);
       }
-
       console.log('➡️ Flow restarted at trigger:', firstTrigger.id);
     }
 
     // --- Get current node ---
     let currentNode = flow.nodes.find(n => n.id === userState.currentNodeId);
     if (!currentNode) {
-      const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
-      if (!firstTrigger) return;
       currentNode = firstTrigger;
       await userFlowService.updateUserState(userState._id, currentNode.id);
     }
 
     // --- Determine next node ---
+
     let nextNode = null;
 
-    switch (currentNode.type) {
-      case 'trigger':
-      case 'action':
-      case 'send_message':
-      case 'template':
-        const outgoingEdge = flow.edges.find(e => e.source === currentNode.id);
-        if (!outgoingEdge) return;
-        nextNode = flow.nodes.find(n => n.id === outgoingEdge.target);
-        break;
+    // Handle wait-for-reply separately
+    if (currentNode.type === 'wait_for_reply') {
+      // Only proceed if the message matches expected options
+      const validResponses = currentNode.data.validResponses || [];
+      const msgLower = msg.body.toLowerCase();
+      const matched = validResponses.find(v => v.toLowerCase() === msgLower);
 
-      case 'wait_for_reply':
-        const waitEdge = flow.edges.find(e => e.source === currentNode.id);
-        if (!waitEdge) return;
-        nextNode = flow.nodes.find(n => n.id === waitEdge.target);
-        break;
-
-      case 'route_by_keyword':
-        const msgLower = msg.body.toLowerCase();
-        const route = currentNode.data.routes.find(r =>
-          r.keywords.some(kw => msgLower.includes(kw.toLowerCase()))
-        );
-        const nextNodeId = route ? route.next : currentNode.data.fallbackNext;
-        nextNode = flow.nodes.find(n => n.id === nextNodeId);
-        break;
-
-      case 'end':
-        // If not restart, just return
-        if (!isRestart) {
-          console.log('✅ Conversation ended:', currentNode.data.reason || 'No reason');
-          return;
+      if (!matched) {
+        // Message doesn't match expected reply, maybe send a fallback
+        if (currentNode.data.fallbackMessage) {
+          await client.sendMessage(msg.from, currentNode.data.fallbackMessage);
+          console.log('📤 Sent fallback message for invalid reply');
         }
-        break;
+        return; // do NOT advance node
+      }
+
+      // Find next node from edges
+      const waitEdge = flow.edges.find(e => e.source === currentNode.id);
+      if (!waitEdge) return;
+      nextNode = flow.nodes.find(n => n.id === waitEdge.target);
+    } else if (currentNode.type === 'route_by_keyword') {
+      const msgLower = msg.body.toLowerCase();
+      const route = currentNode.data.routes.find(r =>
+        r.keywords.some(kw => msgLower.includes(kw.toLowerCase()))
+      );
+      const nextNodeId = route ? route.next : currentNode.data.fallbackNext;
+      nextNode = flow.nodes.find(n => n.id === nextNodeId);
+    } else if (['trigger', 'action', 'send_message', 'template'].includes(currentNode.type)) {
+      const outgoingEdge = flow.edges.find(e => e.source === currentNode.id);
+      if (!outgoingEdge) return;
+      nextNode = flow.nodes.find(n => n.id === outgoingEdge.target);
+    } else if (currentNode.type === 'end') {
+      if (!isRestart) {
+        console.log('✅ Conversation ended:', currentNode.data.reason || 'No reason');
+        return;
+      }
+      // else restart logic already handled above
+      nextNode = flow.nodes.find(n => n.id === firstTrigger.id);
     }
 
     if (!nextNode) return;
@@ -525,6 +527,7 @@ client.on('message', async (msg) => {
     console.error('❌ Message handler error:', err);
   }
 });
+
 
 
 
