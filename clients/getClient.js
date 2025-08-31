@@ -519,15 +519,31 @@ if (!userState) {
         console.log('📤 Template message sent:', template.body);
       }
     } 
-    if (nextNode.type === 'text' && nextNode.data.text) {
+    if (nextNode.type === 'action' && nextNode.data.text) {
   await client.sendMessage(msg.from, nextNode.data.text);
   console.log('📤 Text message sent:', nextNode.data.text);
 }
 
-if (nextNode.type === 'send_message' && nextNode.data.text) {
-  await client.sendMessage(msg.from, nextNode.data.text);
-  console.log('📤 Text message sent:', nextNode.data.text);
+// --- Send response based on next node ---
+if (nextNode.type === 'action') {
+  const { type: actionType, config } = nextNode.data;
+
+  if (actionType === 'send_message' && config.message) {
+    // Send text message
+    await client.sendMessage(msg.from, config.message);
+    console.log('📤 Text message sent:', config.message);
+  } else if (actionType === 'send_message' && config.templateId) {
+    // Send template message
+    const template = await Template.findById(config.templateId);
+    if (template) {
+      await client.sendMessage(msg.from, template.body);
+      console.log('📤 Template message sent:', template.body);
+    }
+  } else {
+    console.log('⚠️ Action type not recognized or empty message');
+  }
 }
+
 
 
     // --- Update user state ---
