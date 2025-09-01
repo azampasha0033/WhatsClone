@@ -33,6 +33,7 @@ import otpRoute from './routes/otp.js';
 import path from 'path';
 import templateRoutes from "./routes/template.routes.js";
 import tagRoutes from "./routes/tag.routes.js";
+const agentRoutes = require('./routes/agent.routes.js'); // Import agent routes
 
 
 import flowRoutes from "./routes/flow.routes.js";  // Import your flow routes
@@ -74,6 +75,7 @@ app.use("/api/tags", tagRoutes);
 app.use('/labels', labelRoute);
 app.use("/uploads", express.static(process.env.BASE_DIR || path.join(process.cwd(), "uploads")));
 app.use('/import-contacts', contactsImportRoute);  // Register the route
+app.use('/api/agents', agentRoutes);
 // API routes
 app.use("/upload", uploadRouter);
 app.use("/api/flows", flowRoutes);  // Register flow-related routes
