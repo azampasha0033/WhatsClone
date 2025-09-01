@@ -33,7 +33,8 @@ import otpRoute from './routes/otp.js';
 import path from 'path';
 import templateRoutes from "./routes/template.routes.js";
 import tagRoutes from "./routes/tag.routes.js";
-const agentRoutes = require('./routes/agent.routes.js'); // Import agent routes
+import agentRoutes from "./routes/agent.routes.js";
+
 
 
 import flowRoutes from "./routes/flow.routes.js";  // Import your flow routes
