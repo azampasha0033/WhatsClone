@@ -276,19 +276,33 @@ app.get('/', (req, res) => res.send('👋 Hello from WhatsApp Web API!'));
 
 const PORT = process.env.PORT || 8080;
 
+const MAX_RETRIES = 3; // Max retries for failed initialization
+const RETRY_DELAY = 2000; // 2 seconds delay before retrying
+
+// Retry mechanism for client initialization
+const retryGetClient = async (clientId, retries = MAX_RETRIES) => {
+  try {
+    await getClient(clientId);
+    console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
+  } catch (err) {
+    if (retries > 0) {
+      console.warn(`⚠️ Retrying client ${clientId}... Attempts left: ${retries}`);
+      setTimeout(() => retryGetClient(clientId, retries - 1), RETRY_DELAY);
+    } else {
+      console.error(`❌ Failed to initialize client ${clientId} after retries:`, err.message);
+    }
+  }
+};
+
 const startServer = async () => {
   await connectDB();
+
 
   try {
     const activeClients = await ClientModel.find({ sessionStatus: 'connected' }, 'clientId');
     await Promise.all(
       activeClients.map(async ({ clientId }) => {
-        try {
-          await getClient(clientId);
-          console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
-        } catch (err) {
-          console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
-        }
+        await retryGetClient(clientId);
       })
     );
   } catch (err) {
