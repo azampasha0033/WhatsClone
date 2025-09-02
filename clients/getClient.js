@@ -120,6 +120,7 @@ client.on('qr', async (qr) => {
 
   // Generate the QR Data URL for display
   const qrData = await qrcode.toDataURL(qr);
+  console.log(qrData);
   qrCodes.set(clientId, qrData);
   sessionStatus.set(clientId, 'pending');  // Mark the session status as 'pending'
 

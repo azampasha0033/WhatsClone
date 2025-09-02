@@ -284,7 +284,7 @@ io.on('connection', (socket) => {
   socket.on('generate-qr', async (clientId) => {
     try {
       const qr = await getQRCode(clientId);
-      console.log(qr);
+  
       socket.emit('qr-code', qr);  // Send QR code to the client
       console.log("📲 QR code sent to client:", clientId);
     } catch (err) {
