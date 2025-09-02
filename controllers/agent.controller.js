@@ -1,7 +1,7 @@
 import { createAgent } from '../services/agent.service.js';
 import { updateAgent } from '../services/agent.service.js';
 import { listAgents } from '../services/agent.service.js';
-import { AgentModel } from '../models/agent.js'; // Make sure you import the Agent model
+import { AgentModel } from '../models/agent.js'; // Ensure you import the Agent model
 import bcrypt from 'bcryptjs';
 
 // Create agent controller
@@ -61,6 +61,11 @@ export const loginAgentController = async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
 
+    // Ensure passwordHash is present
+    if (!agent.passwordHash) {
+      return res.status(400).json({ error: 'Password not set for this agent' });
+    }
+
     // Compare the password with the stored hash
     const isPasswordValid = await bcrypt.compare(password, agent.passwordHash);
     if (!isPasswordValid) {
@@ -82,6 +87,7 @@ export const loginAgentController = async (req, res) => {
       }
     });
   } catch (err) {
+    console.error('Login Error: ', err); // Log error to check the details
     res.status(500).json({ error: err.message });
   }
 };
