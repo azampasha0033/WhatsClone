@@ -4,7 +4,7 @@ const agentSchema = new mongoose.Schema(
   {
     clientId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',  // Link to User model (client)
+      ref: 'User',  // Link to the User model (client)
       required: true,  // Make sure clientId is required
       index: true,
     },
