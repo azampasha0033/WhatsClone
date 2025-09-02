@@ -8,7 +8,7 @@ export const createAgent = async (clientId, data) => {
   // Hash the password before saving
   const passwordHash = await bcrypt.hash(String(password), 12);
 
-  // Create the agent with the provided clientId (not from the logged-in user)
+  // Create the agent with the provided clientId
   return AgentModel.create({
     clientId,  // Use the clientId from the payload
     passwordHash,
