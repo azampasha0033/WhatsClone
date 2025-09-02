@@ -149,6 +149,13 @@ client.on('authenticated', async () => {
     qrCodes.set(clientId, null);
     readyFlags.set(clientId, true);
     sessionStatus.set(clientId, 'connected');
+
+      await ClientModel.updateOne(
+    { clientId },
+    { $set: { sessionStatus: 'connected' } }
+  ).catch((e) => console.warn('⚠️ ClientModel connected warn:', e?.message));
+
+
     global.io?.to(clientId).emit('ready', { message: 'connected' });
 
 /*
