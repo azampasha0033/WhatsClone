@@ -128,7 +128,8 @@ client.on('qr', async (qr) => {
   if (!global.io?.to(clientId)) {
     console.warn(`⚠️ No socket found for clientId: ${clientId}`);
   } else {
-    global.io?.to(clientId).emit('qr', { qr: qrData });
+
+    global.io?.to(clientId).emit('qr-code', { qr: qrData });
     console.log(`📸 Sent QR code to client ${clientId}`);
   }
 
