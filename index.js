@@ -42,6 +42,7 @@ import contactsImportRoute from './routes/contacts-import.js';
 import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.js';
 import scheduleMessageRoute from './routes/scheduleMessage.js';
 
+import agentRoutes from './routes/agent.routes.js';
 
 
 // import usersList from './routes/users-list.js';
@@ -91,7 +92,11 @@ app.use('/send-confirmation', sendConfirmationRoute);
 app.use('/register-client', registerClientRoute);
 app.use('/send-poll-message', sendPollMessageRoute);
 app.use('/api/otp', otpRoute);
+
+app.use('/api/agents', agentRoutes);
+
 const sessionsPath = process.env.SESSIONS_DIR || './wa-sessions';
+
 
 if (!fs.existsSync(sessionsPath)) {
   console.log('⚠️ Session folder missing → Railway wiped storage');
