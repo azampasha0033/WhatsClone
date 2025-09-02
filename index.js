@@ -41,7 +41,7 @@ import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/ge
 import contactsImportRoute from './routes/contacts-import.js';  
 import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.js';
 import scheduleMessageRoute from './routes/scheduleMessage.js';
-import agentRoutes from './routes/agent.routes.js';
+
 
 
 // import usersList from './routes/users-list.js';
@@ -78,9 +78,6 @@ app.use('/import-contacts', contactsImportRoute);  // Register the route
 app.use("/upload", uploadRouter);
 app.use("/api/flows", flowRoutes);  // Register flow-related routes
 app.use('/api', subscribeRoutes);
-app.use('/api/agents', agentRoutes);
-
-
 app.use('/subscriptions', subscriptionsStatusRoute);
 app.use('/subscriptions', subscriptionDetailsRouter);
 
@@ -105,17 +102,23 @@ if (!fs.existsSync(sessionsPath)) {
 /* -------------------------------------------------------------------------- */
 /*                            SAFE CLIENT WRAPPER                             */
 /* -------------------------------------------------------------------------- */
+// Safe client getter with retries and better handling of the ready state
 async function safeGetClient(clientId) {
-  const client = getClient(clientId);
+  const client = await getClient(clientId);
   if (!client) return null;
 
+  // If puppeteer page is closed, restart client
   if (!client.pupPage || client.pupPage.isClosed()) {
     console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
-    try { await client.destroy(); } catch {}
-    await getClient(clientId); // restart
-    return null;
+    try {
+      await client.destroy();
+    } catch (err) {
+      console.error(`❌ Error destroying client: ${err.message}`);
+    }
+    return await getClient(clientId); // Restart and return client
   }
 
+  // If client isn't ready yet, retry or return null
   if (!isClientReady(clientId)) {
     console.warn(`⚠️ Client ${clientId} not ready yet.`);
     return null;
@@ -123,6 +126,7 @@ async function safeGetClient(clientId) {
 
   return client;
 }
+
 
 /* -------------------------------------------------------------------------- */
 /*                                 ROUTES                                     */
@@ -299,29 +303,58 @@ const startServer = async () => {
   }
 
 io.on('connection', (socket) => {
-//  console.log('🔌 Socket.io client connected');
+  console.log('🔌 Socket.io client connected', socket.id);
 
-  socket.on('join-client-room', (clientId) => {
-    if (!clientId) return;
-    console.log('📡 join-client-room received:', clientId);
+  // When a client tries to join a room with their clientId
+  socket.on('join-client-room', async (clientId) => {
+    if (!clientId) {
+      console.warn('⚠️ clientId is missing');
+      return;
+    }
 
-    // prevent duplicate joins
+    console.log('📡 join-client-room received for clientId:', clientId);
+
+    // Prevent duplicate room joins
     if (socket.rooms.has(clientId)) {
-      console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
+      console.log(`⚠️ Client ${clientId} already joined room, ignoring duplicate`);
       return;
     }
 
     socket.join(clientId);
+    console.log(`✅ Client ${clientId} successfully joined the room`);
 
-    // immediately send current session status
+    // Immediately send current session status (whether client is ready or not)
     const status = sessionStatus.get(clientId) || 'disconnected';
+
+    // Emit the session status to the client
     socket.emit('session-status', { clientId, status });
+
+    // Check if the client is ready and the QR code is available
+    const client = await safeGetClient(clientId); // Assuming safeGetClient is your function to check client readiness
+    
+    if (client) {
+      const qr = getQRCode(clientId); // Assume getQRCode returns the QR or null if not ready
+      if (qr) {
+        // If the QR is ready, emit the QR to the client
+        socket.emit('qr', { qr: qr });
+        console.log('📲 QR code sent to client:', clientId);
+      } else {
+        // If QR is not ready yet
+        socket.emit('qr', { qr: 'QR code is still being generated. Please wait...' });
+        console.log('⚠️ QR code not ready for client:', clientId);
+      }
+    } else {
+      socket.emit('qr', { qr: 'Client not ready. Please try again later.' });
+      console.log('⚠️ Client is not ready for QR:', clientId);
+    }
   });
 
+  // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`❌ Socket disconnected (id=${socket.id})`);
   });
 });
+
 
 
   server.listen(PORT, () => {
