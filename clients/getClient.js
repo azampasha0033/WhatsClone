@@ -99,47 +99,82 @@ function getClient(clientId) {
   });
 
   /* --------------------------------- QR Code -------------------------------- */
-  let qrLogged = false;
-  client.on('qr', async (qr) => {
-  // --- simple demo log (from example)
+let qrLogged = false;
+client.on('qr', async (qr) => {
   console.log('QR RECEIVED', typeof qr === 'string' ? qr.slice(0, 40) + '…' : qr);
 
-  // (your existing code continues)
+  // If the client is already authenticated or QR has already been logged, skip further processing
   if (readyFlags.get(clientId)) return;
-  readyFlags.set(clientId, false);
+
+  // Ensure that QR logging happens only once for each client
   if (!qrLogged) {
     console.log(`📸 QR received for ${clientId}`);
-    qrLogged = true;
+    qrLogged = true;  // This needs to be reset if the client reconnects or re-authenticates
   }
+
+  // Ensure that the QR data is valid
+  if (!qr || typeof qr !== 'string') {
+    console.warn('⚠️ Invalid QR received:', qr);
+    return;
+  }
+
+  // Generate the QR Data URL for display
   const qrData = await qrcode.toDataURL(qr);
   qrCodes.set(clientId, qrData);
-  sessionStatus.set(clientId, 'pending');
-  global.io?.to(clientId).emit('qr', { qr: qrData });
-  await ClientModel.updateOne(
-    { clientId },
-    { $set: { sessionStatus: 'pending' } }
-  ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
-  console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
+  sessionStatus.set(clientId, 'pending');  // Mark the session status as 'pending'
+
+  // Emit the QR code data to the client through socket
+  if (!global.io?.to(clientId)) {
+    console.warn(`⚠️ No socket found for clientId: ${clientId}`);
+  } else {
+    global.io?.to(clientId).emit('qr', { qr: qrData });
+    console.log(`📸 Sent QR code to client ${clientId}`);
+  }
+
+  // Update session status in the database to 'pending'
+  try {
+    await ClientModel.updateOne(
+      { clientId },
+      { $set: { sessionStatus: 'pending' } }
+    );
+    console.log(`🕓 sessionStatus → 'pending' for ${clientId}`);
+  } catch (e) {
+    console.warn('⚠️ ClientModel pending warn:', e?.message);
+  }
 });
+
+// Listen for client authentication and update session status
+client.on('authenticated', async () => {
+  try {
+    await ClientModel.updateOne(
+      { clientId },
+      { $set: { sessionStatus: 'authenticated' } }
+    );
+    console.log(`✅ sessionStatus → 'authenticated' for ${clientId}`);
+  } catch (e) {
+    console.warn('⚠️ ClientModel authenticated update failed:', e?.message);
+  }
+});
+
 
 
 // 🔄 Force chat sync if client is already connected
-client.on('authenticated', async () => {
-  try {
-    // give it a short delay so WA session is stable
-    setTimeout(async () => {
-      if (readyFlags.get(clientId)) {
-        const chats = await client.getChats();
-        for (const chat of chats) {
-          await saveChat(clientId, chat);
-        }
-        console.log(`🔄 Forced sync for already-connected client ${clientId}`);
-      }
-    }, 3000);
-  } catch (err) {
-    console.error(`❌ Forced sync failed for ${clientId}:`, err.message);
-  }
-});
+// client.on('authenticated', async () => {
+//   try {
+//     // give it a short delay so WA session is stable
+//     setTimeout(async () => {
+//       if (readyFlags.get(clientId)) {
+//         const chats = await client.getChats();
+//         for (const chat of chats) {
+//           await saveChat(clientId, chat);
+//         }
+//         console.log(`🔄 Forced sync for already-connected client ${clientId}`);
+//       }
+//     }, 3000);
+//   } catch (err) {
+//     console.error(`❌ Forced sync failed for ${clientId}:`, err.message);
+//   }
+// });
 
 
   /* ---------------------------------- Ready --------------------------------- */

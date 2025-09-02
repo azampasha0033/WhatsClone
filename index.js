@@ -99,27 +99,7 @@ if (!fs.existsSync(sessionsPath)) {
   console.log('✅ Session folder exists →', sessionsPath);
 }
 
-/* -------------------------------------------------------------------------- */
-/*                            SAFE CLIENT WRAPPER                             */
-/* -------------------------------------------------------------------------- */
-async function safeGetClient(clientId) {
-  const client = getClient(clientId);
-  if (!client) return null;
 
-  if (!client.pupPage || client.pupPage.isClosed()) {
-    console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
-    try { await client.destroy(); } catch {}
-    await getClient(clientId); // restart
-    return null;
-  }
-
-  if (!isClientReady(clientId)) {
-    console.warn(`⚠️ Client ${clientId} not ready yet.`);
-    return null;
-  }
-
-  return client;
-}
 
 /* -------------------------------------------------------------------------- */
 /*                                 ROUTES                                     */
@@ -295,28 +275,70 @@ const startServer = async () => {
     console.error('❌ Error fetching clients on startup:', err.message);
   }
 
+
+// Socket.io Event for QR code generation and status update
 io.on('connection', (socket) => {
-//  console.log('🔌 Socket.io client connected');
+  console.log('a user connected', socket.id);
 
-  socket.on('join-client-room', (clientId) => {
-    if (!clientId) return;
-    console.log('📡 join-client-room received:', clientId);
-
-    // prevent duplicate joins
-    if (socket.rooms.has(clientId)) {
-      console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
-      return;
+  // When the client requests to generate a QR
+  socket.on('generate-qr', async (clientId) => {
+    try {
+      const qr = await getQRCode(clientId);
+      console.log(qr);
+      socket.emit('qr-code', qr);  // Send QR code to the client
+      console.log("📲 QR code sent to client:", clientId);
+    } catch (err) {
+      console.error('Error generating QR for client', clientId, err);
+      socket.emit('error', { message: 'Failed to generate QR code. Please try again.' });
     }
 
-    socket.join(clientId);
-
-    // immediately send current session status
-    const status = sessionStatus.get(clientId) || 'disconnected';
-    socket.emit('session-status', { clientId, status });
   });
 
-  socket.on('disconnect', () => {
-    console.log(`❌ Socket disconnected (id=${socket.id})`);
+  // When the client requests to check the status of a client (e.g., connection status)
+  socket.on('check-status', async (clientId) => {
+    try {
+      const isReady = await isClientReady(clientId);
+
+      // If client is not ready, try fetching the QR again
+      if (!isReady) {
+        console.log(`Client ${clientId} not ready. Sending QR.`);
+        const qr = await getQRCode(clientId);
+        socket.emit('client-status', { ready: false, qrAvailable: !!qr });
+        socket.emit('qr-code', qr);  // Re-send QR if client isn't ready
+      } else {
+        console.log(`Client ${clientId} is ready.`);
+        socket.emit('client-status', { ready: true, qrAvailable: false });  // No need for QR if already ready
+      }
+    } catch (err) {
+      console.error('Error checking status for client', clientId, err);
+      socket.emit('error', { message: 'Failed to check client status. Please try again later.' });
+    }
+  });
+
+  // Handle client disconnections
+  socket.on('disconnect', async () => {
+    console.log('a user disconnected');
+    // Optional: Re-attempt to re-authenticate or clean up resources
+  });
+
+  // Implementing a reauthentication retry mechanism
+  socket.on('reauthenticate', async (clientId) => {
+    console.log(`Reattempting to authenticate client ${clientId}`);
+
+    try {
+      // You can either try reinitializing the client or retry generating the QR code
+      const isReady = await isClientReady(clientId);
+      if (!isReady) {
+        const qr = await getQRCode(clientId);
+        socket.emit('qr-code', qr);  // Send QR code again for re-authentication
+        socket.emit('client-status', { ready: false, qrAvailable: !!qr });
+      } else {
+        socket.emit('client-status', { ready: true, qrAvailable: false });
+      }
+    } catch (err) {
+      console.error(`Reauthentication failed for client ${clientId}:`, err);
+      socket.emit('error', { message: `Reauthentication failed for client ${clientId}. Please try again.` });
+    }
   });
 });
 
