@@ -296,53 +296,25 @@ const startServer = async () => {
   }
 
 io.on('connection', (socket) => {
-  console.log('🔌 Socket.io client connected', socket.id);
+//  console.log('🔌 Socket.io client connected');
 
-  // When a client tries to join a room with their clientId
-  socket.on('join-client-room', async (clientId) => {
-    if (!clientId) {
-      console.warn('⚠️ clientId is missing');
-      return;
-    }
+  socket.on('join-client-room', (clientId) => {
+    if (!clientId) return;
+    console.log('📡 join-client-room received:', clientId);
 
-    console.log('📡 join-client-room received for clientId:', clientId);
-
-    // Prevent duplicate room joins
+    // prevent duplicate joins
     if (socket.rooms.has(clientId)) {
-      console.log(`⚠️ Client ${clientId} already joined room, ignoring duplicate`);
+      console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
       return;
     }
 
     socket.join(clientId);
-    console.log(`✅ Client ${clientId} successfully joined the room`);
 
-    // Immediately send current session status (whether client is ready or not)
+    // immediately send current session status
     const status = sessionStatus.get(clientId) || 'disconnected';
-
-    // Emit the session status to the client
     socket.emit('session-status', { clientId, status });
-
-    // Check if the client is ready and the QR code is available
-    const client = await safeGetClient(clientId); // Assuming safeGetClient is your function to check client readiness
-    
-    if (client) {
-      const qr = getQRCode(clientId); // Assume getQRCode returns the QR or null if not ready
-      if (qr) {
-        // If the QR is ready, emit the QR to the client
-        socket.emit('qr', { qr: qr });
-        console.log('📲 QR code sent to client:', clientId);
-      } else {
-        // If QR is not ready yet
-        socket.emit('qr', { qr: 'QR code is still being generated. Please wait...' });
-        console.log('⚠️ QR code not ready for client:', clientId);
-      }
-    } else {
-      socket.emit('qr', { qr: 'Client not ready. Please try again later.' });
-      console.log('⚠️ Client is not ready for QR:', clientId);
-    }
   });
 
-  // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`❌ Socket disconnected (id=${socket.id})`);
   });
