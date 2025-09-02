@@ -1,5 +1,5 @@
-import bcrypt from 'bcryptjs';
 import { AgentModel } from '../models/agent.js';
+import bcrypt from 'bcryptjs';
 
 // Create a new agent
 export const createAgent = async (clientId, data) => {

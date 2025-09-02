@@ -1,10 +1,12 @@
 import { createAgent } from '../services/agent.service.js';
 import { updateAgent } from '../services/agent.service.js';
+import { listAgents } from '../services/agent.service.js';
+import { AgentModel } from '../models/agent.js'; // Make sure you import the Agent model
+import bcrypt from 'bcryptjs';
 
 // Create agent controller
 export const createAgentController = async (req, res) => {
   try {
-    // Get `clientId` and agent data from request body
     const { clientId, ...agentData } = req.body;
 
     // Ensure `clientId` is passed
@@ -42,8 +44,6 @@ export const updateAgentController = async (req, res) => {
     res.status(400).json({ error: err.message });  // Handle error
   }
 };
-
-
 
 // Login agent controller
 export const loginAgentController = async (req, res) => {
@@ -86,17 +86,17 @@ export const loginAgentController = async (req, res) => {
   }
 };
 
-
+// List agents controller
 export const listAgentsController = async (req, res) => {
   try {
-    const { clientId } = req.query;  // Get clientId from query params
+    const { clientId } = req.query;  // Get `clientId` from query parameters
     
     if (!clientId) {
       return res.status(400).json({ error: 'clientId is required' });  // Ensure clientId is present
     }
 
     // Call the service function to list agents for the given clientId
-    const agents = await listAgents(clientId);  // Pass clientId to the service
+    const agents = await listAgents(clientId);  // Pass `clientId` to the service
     res.json(agents);  // Return the list of agents
   } catch (err) {
     res.status(500).json({ error: err.message });  // Handle error

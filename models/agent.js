@@ -4,14 +4,14 @@ const agentSchema = new mongoose.Schema(
   {
     clientId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',  // Link to the User model (client)
-      required: true,  // Make sure clientId is required
+      ref: 'User',  // Linking agent to User (client)
+      required: true,
       index: true,
     },
     name: { type: String, trim: true },
     email: {
       type: String,
-      required: true,  // Ensure email is required
+      required: true,
       lowercase: true,
       trim: true,
     },
