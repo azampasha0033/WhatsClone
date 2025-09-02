@@ -102,23 +102,17 @@ if (!fs.existsSync(sessionsPath)) {
 /* -------------------------------------------------------------------------- */
 /*                            SAFE CLIENT WRAPPER                             */
 /* -------------------------------------------------------------------------- */
-// Safe client getter with retries and better handling of the ready state
 async function safeGetClient(clientId) {
-  const client = await getClient(clientId);
+  const client = getClient(clientId);
   if (!client) return null;
 
-  // If puppeteer page is closed, restart client
   if (!client.pupPage || client.pupPage.isClosed()) {
     console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
-    try {
-      await client.destroy();
-    } catch (err) {
-      console.error(`❌ Error destroying client: ${err.message}`);
-    }
-    return await getClient(clientId); // Restart and return client
+    try { await client.destroy(); } catch {}
+    await getClient(clientId); // restart
+    return null;
   }
 
-  // If client isn't ready yet, retry or return null
   if (!isClientReady(clientId)) {
     console.warn(`⚠️ Client ${clientId} not ready yet.`);
     return null;
@@ -126,7 +120,6 @@ async function safeGetClient(clientId) {
 
   return client;
 }
-
 
 /* -------------------------------------------------------------------------- */
 /*                                 ROUTES                                     */
@@ -354,7 +347,6 @@ io.on('connection', (socket) => {
     console.log(`❌ Socket disconnected (id=${socket.id})`);
   });
 });
-
 
 
   server.listen(PORT, () => {
