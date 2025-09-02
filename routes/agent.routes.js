@@ -6,6 +6,11 @@ const router = Router();
 // POST /api/agents - Create agent
 router.post('/', createAgentController);
 
+
+// POST /api/agents/login - Login agent
+router.post('/login', loginAgentController);
+
+
 // GET /api/agents - List agents
 router.get('/', async (req, res) => {
   try {
@@ -49,5 +54,10 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
+router.get('/', listAgentsController);  // Use the controller to list agents
+
+
 
 export default router;

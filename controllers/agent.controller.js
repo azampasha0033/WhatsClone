@@ -42,3 +42,63 @@ export const updateAgentController = async (req, res) => {
     res.status(400).json({ error: err.message });  // Handle error
   }
 };
+
+
+
+// Login agent controller
+export const loginAgentController = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Ensure email and password are provided
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Find the agent by email
+    const agent = await AgentModel.findOne({ email });
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Compare the password with the stored hash
+    const isPasswordValid = await bcrypt.compare(password, agent.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+
+    // If login is successful, return the agent data
+    res.status(200).json({
+      success: true,
+      agent: {
+        _id: agent._id,
+        clientId: agent.clientId,
+        name: agent.name,
+        email: agent.email,
+        phoneRaw: agent.phoneRaw,
+        phoneE164: agent.phoneE164,
+        permissions: agent.permissions,
+        status: agent.status,
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+export const listAgentsController = async (req, res) => {
+  try {
+    const { clientId } = req.query;  // Get clientId from query params
+    
+    if (!clientId) {
+      return res.status(400).json({ error: 'clientId is required' });  // Ensure clientId is present
+    }
+
+    // Call the service function to list agents for the given clientId
+    const agents = await listAgents(clientId);  // Pass clientId to the service
+    res.json(agents);  // Return the list of agents
+  } catch (err) {
+    res.status(500).json({ error: err.message });  // Handle error
+  }
+};
