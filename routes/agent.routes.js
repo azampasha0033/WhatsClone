@@ -9,30 +9,40 @@ import {
 
 const router = Router();
 
-// Middleware: make sure `req.user._id` is set from your auth logic
-// Example: req.user = { _id: "ownerId" }
-
+// POST /api/agents - Create agent
 router.post('/', async (req, res) => {
   try {
-    const agent = await createAgent(req.user._id, req.body);
+    const { clientId, ...agentData } = req.body;  // Get `clientId` from the payload
+    if (!clientId) return res.status(400).json({ error: 'clientId is required' });
+    
+    // Pass clientId and other agent data to the service
+    const agent = await createAgent(clientId, agentData); 
     res.status(201).json(agent);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
+// GET /api/agents - List agents
 router.get('/', async (req, res) => {
   try {
-    const agents = await listAgents(req.user._id);
+    const { clientId } = req.query;  // Get `clientId` from query params
+    if (!clientId) return res.status(400).json({ error: 'clientId is required' });
+    
+    const agents = await listAgents(clientId);  // Pass clientId to the service
     res.json(agents);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// GET /api/agents/:id - Get agent by ID
 router.get('/:id', async (req, res) => {
   try {
-    const agent = await getAgentById(req.user._id, req.params.id);
+    const { clientId } = req.query;  // Get `clientId` from query params
+    if (!clientId) return res.status(400).json({ error: 'clientId is required' });
+
+    const agent = await getAgentById(clientId, req.params.id);  // Pass clientId and agentId to the service
     if (!agent) return res.status(404).json({ error: 'Not found' });
     res.json(agent);
   } catch (err) {
@@ -40,9 +50,13 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// PATCH /api/agents/:id - Update agent
 router.patch('/:id', async (req, res) => {
   try {
-    const agent = await updateAgent(req.user._id, req.params.id, req.body);
+    const { clientId, ...updates } = req.body;  // Get `clientId` and updates from the payload
+    if (!clientId) return res.status(400).json({ error: 'clientId is required' });
+    
+    const agent = await updateAgent(clientId, req.params.id, updates);  // Pass clientId, agentId, and updates to the service
     if (!agent) return res.status(404).json({ error: 'Not found' });
     res.json(agent);
   } catch (err) {
@@ -50,9 +64,13 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/agents/:id - Delete agent (soft delete)
 router.delete('/:id', async (req, res) => {
   try {
-    const agent = await deleteAgent(req.user._id, req.params.id);
+    const { clientId } = req.query;  // Get `clientId` from query params
+    if (!clientId) return res.status(400).json({ error: 'clientId is required' });
+
+    const agent = await deleteAgent(clientId, req.params.id);  // Pass clientId and agentId to the service
     if (!agent) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, agent });
   } catch (err) {
