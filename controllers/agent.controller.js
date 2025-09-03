@@ -56,7 +56,9 @@ export const loginAgentController = async (req, res) => {
     }
 
     // Find the agent by email
-    const agent = await AgentModel.findOne({ email });
+const agent = await AgentModel.findOne({ email }).select('passwordHash');
+
+
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found' });
     }
