@@ -17,7 +17,7 @@ const agentSchema = new mongoose.Schema(
     },
     phoneRaw: { type: String, trim: true },
     phoneE164: { type: String, trim: true },
-    passwordHash: { type: String, required: true, select: false },  // Ensure it's stored but not selected by default
+    passwordHash: { type: String, required: true }, 
     permissions: {
       create: { type: Boolean, default: false },
       update: { type: Boolean, default: false },
