@@ -28,7 +28,6 @@ export const createAgent = async (clientId, data) => {
 };
 
 
-console.log(agent);
 
 // List all agents associated with a specific clientId (owner)
 export const listAgents = async (clientId) => {
