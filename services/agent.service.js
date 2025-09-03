@@ -5,16 +5,30 @@ import bcrypt from 'bcryptjs';
 export const createAgent = async (clientId, data) => {
   const { password, ...rest } = data;
 
-  // Hash the password before saving
-  const passwordHash = await bcrypt.hash(String(password), 12);
+  // Ensure password is provided
+  if (!password) {
+    throw new Error('Password is required');  // Make sure password is not missing
+  }
 
-  // Create the agent with the provided clientId
-  return AgentModel.create({
-    clientId,  // Use the clientId from the payload
-    passwordHash,
-    ...rest  // Spread the rest of the agent data (name, email, etc.)
-  });
+  try {
+    // Hash the password before saving
+    const passwordHash = await bcrypt.hash(String(password), 12);
+
+    // Create the agent with the provided clientId and passwordHash
+    const agent = await AgentModel.create({
+      clientId,  // Use the clientId from the payload
+      passwordHash,
+      ...rest  // Spread the rest of the agent data (name, email, etc.)
+    });
+
+    return agent;
+  } catch (err) {
+    throw new Error(`Error creating agent: ${err.message}`);
+  }
 };
+
+
+console.log(agent);
 
 // List all agents associated with a specific clientId (owner)
 export const listAgents = async (clientId) => {

@@ -91,7 +91,6 @@ export const loginAgentController = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-
 // List agents controller
 export const listAgentsController = async (req, res) => {
   try {
