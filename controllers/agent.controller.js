@@ -58,12 +58,14 @@ export const loginAgentController = async (req, res) => {
     // Find the agent by email and return all fields
     const agent = await AgentModel.findOne({ email });
 
+    const agentpassword = await AgentModel.findOne({ email }).select('passwordHash');
+
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found' });
     }
 
     // Ensure passwordHash is present
-    if (!agent.passwordHash) {
+    if (!agentpassword.passwordHash) {
       return res.status(400).json({ error: 'Password not set for this agent' });
     }
 
