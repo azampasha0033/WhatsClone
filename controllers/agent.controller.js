@@ -28,19 +28,20 @@ export const createAgentController = async (req, res) => {
 // Update agent controller
 // agent.controller.js
 export const updateAgentController = async (req, res) => {
+
+  console.log("Request Params:", req.params);  // Debugging: Log request parameters
+
+  
   try {
-    // Get the agentId from the URL parameter (req.params)
     const { agentId } = req.params;  // Get agentId from URL param
-    const { clientId, ...updates } = req.body;  // Get updates from the request body
+    const { clientId, ...updates } = req.body;  // Get clientId and updates from the body
 
-    console.log(agentId);  // Debugging log to check if agentId is correctly passed
+    console.log("Agent ID:", agentId);  // Debugging: Check if agentId is correctly passed
 
-    // Check if clientId is provided in the body
     if (!clientId) {
       return res.status(400).json({ error: 'clientId is required' });
     }
 
-    // If agentId is not present in the URL params, return an error
     if (!agentId) {
       return res.status(400).json({ error: 'Agent ID is required' });
     }
@@ -48,15 +49,13 @@ export const updateAgentController = async (req, res) => {
     // Call the service to update the agent
     const updatedAgent = await updateAgent(agentId, clientId, updates);
 
-    // If no agent is found, return a not found error
     if (!updatedAgent) {
       return res.status(404).json({ error: 'Agent not found' });
     }
 
-    // Return the updated agent data
-    res.json(updatedAgent);
+    res.json(updatedAgent);  // Return the updated agent
   } catch (err) {
-    res.status(400).json({ error: err.message });  // Handle error
+    res.status(400).json({ error: err.message });
   }
 };
 
@@ -67,6 +66,7 @@ export const deleteAgentController = async (req, res) => {
     const { clientId } = req.query;  // Get `clientId` from query parameters
     const { agentId } = req.params;  // Get agentId from params
 
+    
     if (!clientId) {
       return res.status(400).json({ error: 'clientId is required' });
     }
