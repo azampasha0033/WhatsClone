@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { createAgentController, updateAgentController, loginAgentController, listAgentsController } from '../controllers/agent.controller.js'; 
+import { deleteAgent } from '../services/agent.service.js'; 
 
 const router = Router();
 
@@ -17,12 +18,11 @@ router.patch('/:id', updateAgentController);  // <-- Use the controller function
 
 // DELETE /api/agents/:id - Delete agent (soft delete)
 router.delete('/:id', async (req, res) => {
-
   try {
     const { clientId } = req.query;  // Get `clientId` from query parameters
     if (!clientId) return res.status(400).json({ error: 'clientId is required' });
 
-    const agent = await ddeleteAgent(clientId, req.params.id);  // Call delete service
+    const agent = await ddeleteAgent(clientId, req.params.id);  // Call ddeleteAgent service function
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found or already inactive' });
     }
