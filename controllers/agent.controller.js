@@ -62,15 +62,21 @@ export const updateAgentController = async (req, res) => {
 
 export const deleteAgentController = async (req, res) => {
   try {
+    console.log('for delete'.req.params);
     const { clientId } = req.query;  // Get `clientId` from query parameters
-    const { agentId } = req.params;  // Get agentId from params
+    const { id } = req.params;  // Get agentId from params
 
     
     if (!clientId) {
       return res.status(400).json({ error: 'clientId is required' });
     }
+ 
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Agentid  is required' });
+    }
 
-    const agent = await deleteAgent(clientId, agentId);  // Call delete service
+    const agent = await deleteAgent(clientId, id);  // Call delete service
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found or already inactive' });
     }
