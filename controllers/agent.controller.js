@@ -1,6 +1,7 @@
 import { createAgent } from '../services/agent.service.js';
 // agent.controller.js
 import { updateAgent } from '../services/agent.service.js';  // <-- Correct import
+import { deleteAgent } from '../services/agent.service.js';  // <-- Ensure this import
 
 import { listAgents } from '../services/agent.service.js';
 import { AgentModel } from '../models/agent.js'; // Ensure you import the Agent model
@@ -50,7 +51,7 @@ export const updateAgentController = async (req, res) => {
 
 export const deleteAgentController = async (req, res) => {
   try {
-    const { clientId } = req.query;  // Get `clientId` from query
+    const { clientId } = req.query;  // Get `clientId` from query parameters
     const { agentId } = req.params;  // Get agentId from params
 
     if (!clientId) {
@@ -70,6 +71,7 @@ export const deleteAgentController = async (req, res) => {
 
 
 
+
 // Login agent controller
 // Login agent controller
 export const loginAgentController = async (req, res) => {
@@ -82,11 +84,11 @@ export const loginAgentController = async (req, res) => {
     }
 
     // Find the agent by email and return all fields
-    const agent = await AgentModel.findOne({ email });
+ const agent = await AgentModel.findOne({ _id: agentId, clientId });
+if (!agent) {
+  throw new Error('Agent not found');
+}
 
-    if (!agent) {
-      return res.status(404).json({ error: 'Agent not found' });
-    }
 console.log(agent);
     // Ensure passwordHash is present
     if (!agent.passwordHash) {
