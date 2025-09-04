@@ -22,7 +22,7 @@ router.delete('/:id', async (req, res) => {
     const { clientId } = req.query;  // Get `clientId` from query parameters
     if (!clientId) return res.status(400).json({ error: 'clientId is required' });
 
-    const agent = await ddeleteAgent(clientId, req.params.id);  // Call ddeleteAgent service function
+    const agent = await deleteAgent(clientId, req.params.id);  // Call ddeleteAgent service function
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found or already inactive' });
     }
