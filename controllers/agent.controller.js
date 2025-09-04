@@ -32,8 +32,14 @@ export const updateAgentController = async (req, res) => {
     const { agentId } = req.params;  // Get agentId from URL param
     const { clientId, ...updates } = req.body;  // Get updates from the body
 
+console.log(agentId);
+
     if (!clientId) {
       return res.status(400).json({ error: 'clientId is required' });
+    }
+   
+    if (!agentId) {
+      return res.status(400).json({ error: 'Agent ID is required' });
     }
 
     // Call the service to update the agent
