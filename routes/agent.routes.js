@@ -16,6 +16,7 @@ router.get('/', listAgentsController);
 // PATCH /api/agents/:id - Update agent
 router.patch('/:id', updateAgentController);  // <-- Use the controller function
 
+
 // DELETE /api/agents/:id - Delete agent (soft delete)
 router.delete('/:id', async (req, res) => {
   try {
