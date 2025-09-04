@@ -17,7 +17,7 @@ router.patch('/:id', updateAgentController);  // <-- Use the controller function
 
 // DELETE /api/agents/:id - Delete agent (soft delete)
 router.delete('/:id', async (req, res) => {
-  console.log('Deleting agent...'.req.params);
+
   try {
     const { clientId } = req.query;  // Get `clientId` from query parameters
     if (!clientId) return res.status(400).json({ error: 'clientId is required' });
