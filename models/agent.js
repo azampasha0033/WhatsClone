@@ -55,6 +55,5 @@ const agentSchema = new mongoose.Schema(
 
 // Ensure uniqueness *per owner* (same email/phone can exist under different owners)
 agentSchema.index({ clientId: 1, email: 1 }, { unique: true });
-agentSchema.index({ clientId: 1, phoneE164: 1 }, { unique: true });
 
 export const AgentModel = mongoose.model('Agent', agentSchema);
