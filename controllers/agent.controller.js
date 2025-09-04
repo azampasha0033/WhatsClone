@@ -32,21 +32,21 @@ export const updateAgentController = async (req, res) => {
   console.log("Request Params:", req.params);  // Debugging: Log request parameters
 
   try {
-    const { agentId } = req.params;  // Get agentId from URL param
+   const { id } = req.params; // Get agentId from URL param
     const { clientId, ...updates } = req.body;  // Get clientId and updates from the body
 
-    console.log("Agent ID:", agentId);  // Debugging: Check if agentId is correctly passed
+    console.log("Agent ID:", id);  // Debugging: Check if agentId is correctly passed
 
     if (!clientId) {
       return res.status(400).json({ error: 'clientId is required' });
     }
 
-    if (!agentId) {
+    if (!id) {
       return res.status(400).json({ error: 'Agent ID is required' });
     }
 
     // Call the service to update the agent
-    const updatedAgent = await updateAgent(agentId, clientId, updates);
+    const updatedAgent = await updateAgent(id, clientId, updates);
 
     if (!updatedAgent) {
       return res.status(404).json({ error: 'Agent not found' });
