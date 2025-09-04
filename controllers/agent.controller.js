@@ -1,5 +1,7 @@
 import { createAgent } from '../services/agent.service.js';
-import { updateAgent } from '../services/agent.service.js';
+// agent.controller.js
+import { updateAgent } from '../services/agent.service.js';  // <-- Correct import
+
 import { listAgents } from '../services/agent.service.js';
 import { AgentModel } from '../models/agent.js'; // Ensure you import the Agent model
 import bcrypt from 'bcryptjs';
@@ -23,25 +25,28 @@ export const createAgentController = async (req, res) => {
 };
 
 // Update agent controller
+// agent.controller.js
 export const updateAgentController = async (req, res) => {
   try {
     const { agentId } = req.params;  // Get agentId from URL param
-    const { clientId, ...updates } = req.body;  // Get updates from body
+    const { clientId, ...updates } = req.body;  // Get updates from the body
 
     if (!clientId) {
       return res.status(400).json({ error: 'clientId is required' });
     }
 
+    // Call the service to update the agent
     const updatedAgent = await updateAgent(agentId, clientId, updates);
     if (!updatedAgent) {
-      return res.status(404).json({ error: 'Agent not found or not updated' });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
-    res.json(updatedAgent);
+    res.json(updatedAgent);  // Return the updated agent
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message });  // Handle error
   }
 };
+
 
 export const deleteAgentController = async (req, res) => {
   try {

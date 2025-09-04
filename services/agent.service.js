@@ -40,6 +40,7 @@ export const getAgentById = async (clientId, agentId) => {
 };
 
 // Update an agent for a specific clientId (owner)
+// agent.service.js
 export const updateAgent = async (agentId, clientId, updates) => {
   if (updates.password) {
     updates.passwordHash = await bcrypt.hash(String(updates.password), 12);
@@ -58,6 +59,7 @@ export const updateAgent = async (agentId, clientId, updates) => {
     { new: true, runValidators: true }
   );
 };
+
 
 
 

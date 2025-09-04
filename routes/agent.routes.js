@@ -12,6 +12,10 @@ router.post('/login', loginAgentController);
 // GET /api/agents - List agents
 router.get('/', listAgentsController);  // <-- List agents using controller
 
+// agent.routes.js
+router.patch('/:id', updateAgentController);  // <-- Use the controller function
+
+
 // GET /api/agents/:id - Get agent by ID
 router.get('/:id', async (req, res) => {
   try {
