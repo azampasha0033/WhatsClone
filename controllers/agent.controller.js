@@ -1,7 +1,7 @@
 import { createAgent } from '../services/agent.service.js';
 // agent.controller.js
 import { updateAgent } from '../services/agent.service.js';  // <-- Correct import
-import { ddeleteAgent } from '../services/agent.service.js';  // <-- Ensure this import
+import { deleteAgent } from '../services/agent.service.js';  // <-- Ensure this import
 
 import { listAgents } from '../services/agent.service.js';
 import { AgentModel } from '../models/agent.js'; // Ensure you import the Agent model
@@ -76,7 +76,7 @@ export const deleteAgentController = async (req, res) => {
       return res.status(400).json({ error: 'Agentid  is required' });
     }
 
-    const agent = await ddeleteAgent(clientId, id);  // Call delete service
+    const agent = await deleteAgent(clientId, id);  // Call delete service
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found or already inactive' });
     }
