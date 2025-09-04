@@ -64,10 +64,10 @@ export const updateAgent = async (agentId, clientId, updates) => {
 
 
 // Soft delete an agent by changing its status to 'inactive'
-export const deleteAgent = async (clientId, agentId) => {
+export const ddeleteAgent = async (clientId, agentId) => {
   return AgentModel.findOneAndUpdate(
     { _id: agentId, clientId },
-    { status: 'inactive' },  // Update status to 'inactive' for soft delete
+    { status: 'delete' },  // Update status to 'inactive' for soft delete
     { new: true }
   );
 };
