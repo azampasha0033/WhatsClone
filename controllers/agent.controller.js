@@ -25,25 +25,45 @@ export const createAgentController = async (req, res) => {
 // Update agent controller
 export const updateAgentController = async (req, res) => {
   try {
-    const { agentId } = req.params;  // Get agentId from the URL parameter
-    const { clientId, ...updates } = req.body;  // Get clientId and updates from the body
+    const { agentId } = req.params;  // Get agentId from URL param
+    const { clientId, ...updates } = req.body;  // Get updates from body
 
-    // Ensure `clientId` is passed
     if (!clientId) {
       return res.status(400).json({ error: 'clientId is required' });
     }
 
-    // Call the service to update the agent
     const updatedAgent = await updateAgent(agentId, clientId, updates);
     if (!updatedAgent) {
-      return res.status(404).json({ error: 'Agent not found' });
+      return res.status(404).json({ error: 'Agent not found or not updated' });
     }
 
-    res.json(updatedAgent);  // Return the updated agent
+    res.json(updatedAgent);
   } catch (err) {
-    res.status(400).json({ error: err.message });  // Handle error
+    res.status(400).json({ error: err.message });
   }
 };
+
+export const deleteAgentController = async (req, res) => {
+  try {
+    const { clientId } = req.query;  // Get `clientId` from query
+    const { agentId } = req.params;  // Get agentId from params
+
+    if (!clientId) {
+      return res.status(400).json({ error: 'clientId is required' });
+    }
+
+    const agent = await deleteAgent(clientId, agentId);  // Call delete service
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found or already inactive' });
+    }
+
+    res.json({ success: true, agent });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
 
 // Login agent controller
 // Login agent controller

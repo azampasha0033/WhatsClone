@@ -46,12 +46,20 @@ export const updateAgent = async (agentId, clientId, updates) => {
     delete updates.password;  // Remove plain text password
   }
 
-  return AgentModel.findOneAndUpdate(
-    { _id: agentId, clientId },  // Use clientId from the payload
+  const agent = await AgentModel.findOne({ _id: agentId, clientId });
+  if (!agent) {
+    throw new Error('Agent not found');
+  }
+
+  // Update agent with the provided data
+  return await AgentModel.findOneAndUpdate(
+    { _id: agentId, clientId },
     updates,
     { new: true, runValidators: true }
   );
 };
+
+
 
 // Soft delete an agent by changing its status to 'inactive'
 export const deleteAgent = async (clientId, agentId) => {
