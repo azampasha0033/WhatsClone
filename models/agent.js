@@ -48,7 +48,7 @@ const agentSchema = new mongoose.Schema(
       subscription: { type: Boolean, default: false },
       APIKEY: { type: Boolean, default: false },
     },
-    status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+    status: { type: String, enum: ['active', 'inactive','deleted'], default: 'active' },
   },
   { timestamps: true }
 );

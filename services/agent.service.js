@@ -65,7 +65,7 @@ export const updateAgent = async (agentId, clientId, updates) => {
 export const deleteAgent = async (clientId, agentId) => {
   return AgentModel.findOneAndUpdate(
     { _id: agentId, clientId },
-    { status: 'inactive' },
+    { status: 'deleted' },
     { new: true }
   );
 };
