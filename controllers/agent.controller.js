@@ -31,7 +31,6 @@ export const updateAgentController = async (req, res) => {
 
   console.log("Request Params:", req.params);  // Debugging: Log request parameters
 
-  
   try {
     const { agentId } = req.params;  // Get agentId from URL param
     const { clientId, ...updates } = req.body;  // Get clientId and updates from the body
