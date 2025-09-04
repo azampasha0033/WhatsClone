@@ -83,13 +83,13 @@ export const loginAgentController = async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Find the agent by email and return all fields
- const agent = await AgentModel.findOne({ _id: agentId, clientId });
-if (!agent) {
-  throw new Error('Agent not found');
-}
+    // Find the agent by email
+    const agent = await AgentModel.findOne({ email });
 
-console.log(agent);
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
     // Ensure passwordHash is present
     if (!agent.passwordHash) {
       return res.status(400).json({ error: 'Password not set for this agent' });
@@ -113,14 +113,14 @@ console.log(agent);
         phoneE164: agent.phoneE164,
         permissions: agent.permissions,
         status: agent.status,
-        // Add any other fields you need to return
       }
     });
   } catch (err) {
-    console.error('Login Error: ', err); // Log error to check the details
+    console.error('Login Error: ', err);  // Log the error for debugging
     res.status(500).json({ error: err.message });
   }
 };
+
 
 // List agents controller
 export const listAgentsController = async (req, res) => {
