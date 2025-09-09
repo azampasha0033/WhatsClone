@@ -1,16 +1,16 @@
-// services/chat.service.js
 import { Chat } from '../models/Chat.js';
 import { AgentModel } from '../models/agent.js';
 
-export const assignChatToAgent = async (clientId, chatId, agentId) => {
-  // Check agent exists and belongs to the client
-  const agent = await AgentModel.findOne({ _id: agentId, clientId, status: 'active' });
-  if (!agent) throw new Error('Agent not found or inactive');
+// Automatic assignment: assign to the first available active agent
+export const autoAssignChat = async (clientId, chatId) => {
+  // Find first active agent
+  const agent = await AgentModel.findOne({ clientId, status: 'active' });
+  if (!agent) throw new Error('No active agent available');
 
-  // Assign chat
+  // Assign the chat
   const chat = await Chat.findOneAndUpdate(
     { clientId, chatId },
-    { agentId, status: 'assigned' },
+    { agentId: agent._id, status: 'assigned' },
     { new: true }
   );
 
