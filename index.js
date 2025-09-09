@@ -34,6 +34,9 @@ import path from 'path';
 import templateRoutes from "./routes/template.routes.js";
 import tagRoutes from "./routes/tag.routes.js";
 
+import chatRoutes from './routes/chat.routes.js'; // your chat routes
+import agentRoutes from './routes/agent.routes.js'; // your agent routes
+
 
 import flowRoutes from "./routes/flow.routes.js";  // Import your flow routes
 // index.js
@@ -42,7 +45,7 @@ import contactsImportRoute from './routes/contacts-import.js';
 import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.js';
 import scheduleMessageRoute from './routes/scheduleMessage.js';
 
-import agentRoutes from './routes/agent.routes.js';
+
 
 
 // import usersList from './routes/users-list.js';
@@ -68,6 +71,9 @@ app.use(cors());
 app.use(express.json());
 
 startScheduledMessageSender();
+
+// Routes
+app.use('/api/chats', chatRoutes);
 
 app.use('/schedule', scheduleMessageRoute);
 app.use("/api/templates", templateRoutes);
