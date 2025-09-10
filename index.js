@@ -170,15 +170,7 @@ app.get('/chats/:clientId', async (req, res) => {
       unreadCount: chat.unreadCount,
       lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
       timestamp: chat.timestamp,
-        status: dbChat?.status || 'pending',
-          agent: dbChat?.agentId
-            ? {
-                _id: dbChat.agentId._id,
-                name: dbChat.agentId.name,
-                email: dbChat.agentId.email,
-                status: dbChat.agentId.status
-              }
-            : null
+      agentId: chat.agentId._serialized,
     }));
 
     global.io?.to(clientId).emit('chats-list', formatted);
