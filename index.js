@@ -40,7 +40,7 @@ import agentRoutes from './routes/agent.routes.js'; // your agent routes
 
 import flowRoutes from "./routes/flow.routes.js";  // Import your flow routes
 // index.js
-import { getClient, getQRCode, isClientReady, sessionStatus } from './clients/getClient.js';
+import { getClient, getQRCode, isClientReady, sessionStatus,safeGetClient } from './clients/getClient.js';
 import contactsImportRoute from './routes/contacts-import.js';  
 import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.js';
 import scheduleMessageRoute from './routes/scheduleMessage.js';
@@ -113,24 +113,24 @@ if (!fs.existsSync(sessionsPath)) {
 /* -------------------------------------------------------------------------- */
 /*                            SAFE CLIENT WRAPPER                             */
 /* -------------------------------------------------------------------------- */
-async function safeGetClient(clientId) {
-  const client = getClient(clientId);
-  if (!client) return null;
+// async function safeGetClient(clientId) {
+//   const client = getClient(clientId);
+//   if (!client) return null;
 
-  if (!client.pupPage || client.pupPage.isClosed()) {
-    console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
-    try { await client.destroy(); } catch {}
-    await getClient(clientId); // restart
-    return null;
-  }
+//   if (!client.pupPage || client.pupPage.isClosed()) {
+//     console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
+//     try { await client.destroy(); } catch {}
+//     await getClient(clientId); // restart
+//     return null;
+//   }
 
-  if (!isClientReady(clientId)) {
-    console.warn(`⚠️ Client ${clientId} not ready yet.`);
-    return null;
-  }
+//   if (!isClientReady(clientId)) {
+//     console.warn(`⚠️ Client ${clientId} not ready yet.`);
+//     return null;
+//   }
 
-  return client;
-}
+//   return client;
+// }
 
 /* -------------------------------------------------------------------------- */
 /*                                 ROUTES                                     */

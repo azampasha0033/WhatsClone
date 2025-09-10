@@ -78,6 +78,29 @@ function extractOrderNumberFromCorrelation(corr) {
   return m ? m[1] : null;
 }
 
+
+
+// Safe wrapper to get client (checks Puppeteer + readiness)
+export async function safeGetClient(clientId) {
+  const client = getClient(clientId);
+  if (!client) return null;
+
+  if (!client.pupPage || client.pupPage.isClosed()) {
+    console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
+    try { await client.destroy(); } catch {}
+    await getClient(clientId); // restart client
+    return null;
+  }
+
+  if (!isClientReady(clientId)) {
+    console.warn(`⚠️ Client ${clientId} not ready yet.`);
+    return null;
+  }
+
+  return client;
+}
+
+
 /* -------------------------------- getClient -------------------------------- */
 function getClient(clientId) {
   if (clients.has(clientId)) return clients.get(clientId);
