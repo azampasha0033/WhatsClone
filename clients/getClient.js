@@ -17,7 +17,7 @@ import { flowService } from "../services/flow.service.js";
 import { Template } from "../models/Template.js"; // if using templates
 
 import { autoAssignChat } from '../services/chat.service.js'; 
-
+import { Chat } from '../models/Chat.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -407,6 +407,7 @@ if(sent){
 
 
 /* ------------------------------- New Message ------------------------------ */
+/* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
     console.log('📨 New message received from:', msg.from, 'Body:', msg.body);
@@ -428,6 +429,13 @@ client.on('message', async (msg) => {
     };
     global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
 
+    // ✅ Check if chat is already assigned
+    const existingChat = await Chat.findOne({ clientId, chatId: msg.from }, { status: 1 });
+    if (existingChat && existingChat.status === 'assigned') {
+      console.log(`🙅 Chat ${msg.from} is already assigned to an agent. Skipping flow.`);
+      return; // stop flow handling
+    }
+
     // --- Fetch flows for client ---
     const flows = await flowService.getFlows(clientId);
     if (!flows || flows.length === 0) return;
@@ -441,9 +449,8 @@ client.on('message', async (msg) => {
     const firstOutgoing = (nodeId) => flow.edges.find(e => e.source === nodeId);
     const outgoingAll   = (nodeId) => flow.edges.filter(e => e.source === nodeId);
 
-    // send messages / handle actions
+    // --- Send messages / handle actions
     const sendNodeMessage = async (node) => {
-      // send_message
       if (node.type === 'send_message') {
         const text = node.data?.message || node.data?.config?.message || '';
         if (text) {
@@ -453,7 +460,6 @@ client.on('message', async (msg) => {
         return true;
       }
 
-      // template
       if (node.type === 'template') {
         const tplId = node.data?.config?.templateId;
         if (tplId) {
@@ -466,7 +472,6 @@ client.on('message', async (msg) => {
         return true;
       }
 
-      // action:send_message
       if (node.type === 'action' && node.data?.type === 'send_message') {
         const text = node.data?.message || node.data?.config?.message || '';
         if (text) {
@@ -476,7 +481,7 @@ client.on('message', async (msg) => {
         return true;
       }
 
-      // action:connect_agent (NEW)
+      // ✅ NEW: action:connect_agent
       if (node.type === 'action' && node.data?.type === 'connect_agent') {
         const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
         console.log(`🤝 Chat ${msg.from} auto-assigned to agent ${chat.agentId}`);
@@ -486,7 +491,7 @@ client.on('message', async (msg) => {
       return false;
     };
 
-    // Advance until wait_for_reply, end, or agent_assigned
+    // --- Advance until wait_for_reply, end, or agent_assigned
     const advanceUntilWaitOrEnd = async (current) => {
       let node = current;
 
@@ -520,15 +525,14 @@ client.on('message', async (msg) => {
       return current;
     };
 
-    // Restart commands
+    // --- Restart commands
     const restartKeywords = ['restart', '/start', 'start', 'menu', 'main menu', 'back to menu'];
     const bodyLower = (msg.body || '').toLowerCase().trim();
     const isRestart = restartKeywords.some(k => bodyLower === k || bodyLower.includes(k));
 
-    // --- Get or create user state ---
+    // --- Get or create user state
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
 
-    // restart flow
     const restartFlow = async () => {
       const startNode = await advanceUntilWaitOrEnd(firstTrigger);
       await userFlowService.updateUserState(
@@ -539,20 +543,17 @@ client.on('message', async (msg) => {
       return startNode;
     };
 
-    // no state yet
     if (!userState) {
       const atNode = await restartFlow();
       if (atNode.type === 'wait_for_reply') return;
       return;
     }
 
-    // restart if needed
     if (isRestart || getNode(userState.currentNodeId)?.type === 'end') {
       await restartFlow();
       return;
     }
 
-    // normal handling
     let currentNode = getNode(userState.currentNodeId);
     if (!currentNode) {
       currentNode = await restartFlow();
@@ -563,7 +564,7 @@ client.on('message', async (msg) => {
       const landed = await advanceUntilWaitOrEnd(currentNode);
       await userFlowService.updateUserState(userState._id, landed.id);
 
-      // if agent took over, stop
+      // stop if agent took over
       if (landed.type === 'action' && landed.data?.type === 'connect_agent') {
         return;
       }
@@ -596,13 +597,12 @@ client.on('message', async (msg) => {
 
       const nextNodeId = matchedRoute ? matchedRoute.next : currentNode.data?.fallbackNext;
       let nextNode = nextNodeId ? getNode(nextNodeId) : null;
-
       if (!nextNode) return;
 
       const landed = await advanceUntilWaitOrEnd(nextNode);
       await userFlowService.updateUserState(userState._id, landed.id);
 
-      // if agent took over, stop
+      // stop if agent took over
       if (landed.type === 'action' && landed.data?.type === 'connect_agent') {
         return;
       }
