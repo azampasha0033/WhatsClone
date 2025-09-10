@@ -412,10 +412,6 @@ if(sent){
 
 
 
-
-// store inactivity timers per chat
-const inactivityTimers = new Map();
-
 /* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
@@ -444,19 +440,30 @@ client.on('message', async (msg) => {
       { $set: { lastActivityAt: new Date() } },
       { upsert: true }
     );
+
     if (inactivityTimers.has(msg.from)) {
       clearTimeout(inactivityTimers.get(msg.from));
     }
+
     inactivityTimers.set(
       msg.from,
       setTimeout(async () => {
         console.log(`⏳ Chat ${msg.from} inactive for 1 minute → closing.`);
+
         await Chat.findOneAndUpdate(
           { clientId, chatId: msg.from },
           { $set: { status: 'closed' } }
         );
+
+        // 🔔 Notify frontend
         global.io?.to(clientId).emit('chat-closed', { chatId: msg.from });
-      }, 60 * 1000) // 1 min
+
+        // 📤 Send message to customer
+        await client.sendMessage(
+          msg.from,
+          "⏳ This chat has been closed due to inactivity. Please send a new message to restart."
+        );
+      }, 60 * 1000) // 1 minute
     );
 
     // ✅ Check if chat is already assigned
