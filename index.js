@@ -45,6 +45,7 @@ import contactsImportRoute from './routes/contacts-import.js';
 import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.js';
 import scheduleMessageRoute from './routes/scheduleMessage.js';
 
+import { Chat } from './models/Chat.js'; // make sure this is imported
 
 
 // import usersList from './routes/users-list.js';
@@ -163,15 +164,32 @@ app.get('/chats/:clientId', async (req, res) => {
       return res.status(500).json({ error: `Client ${clientId} needs restart` });
     }
 
-    const formatted = chats.map(chat => ({
-      id: chat.id._serialized,
-      name: chat.name,
-      isGroup: chat.isGroup,
-      unreadCount: chat.unreadCount,
-      lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
-      timestamp: chat.timestamp,
-      agentId: chat.agentId,
-    }));
+    // Get chat assignments from DB
+    const dbChats = await Chat.find({ clientId }, { chatId: 1, agentId: 1, status: 1 });
+
+    // Build a lookup map by chatId
+    const assignmentMap = {};
+    dbChats.forEach(c => {
+      assignmentMap[c.chatId] = {
+        agentId: c.agentId ? String(c.agentId) : null,
+        status: c.status || 'pending'
+      };
+    });
+
+    // Merge WhatsApp chats with DB data
+    const formatted = chats.map(chat => {
+      const assignInfo = assignmentMap[chat.id._serialized] || {};
+      return {
+        id: chat.id._serialized,
+        name: chat.name,
+        isGroup: chat.isGroup,
+        unreadCount: chat.unreadCount,
+        lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
+        timestamp: chat.timestamp,
+        agentId: assignInfo.agentId,
+        status: assignInfo.status || 'pending'
+      };
+    });
 
     global.io?.to(clientId).emit('chats-list', formatted);
     return res.json({ clientId, chats: formatted });
@@ -181,7 +199,6 @@ app.get('/chats/:clientId', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
-
 // ✅ Messages
 app.get('/messages/:clientId/:chatId', async (req, res) => {
   try {
