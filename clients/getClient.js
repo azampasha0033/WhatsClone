@@ -473,21 +473,24 @@ client.on('message', async (msg) => {
         return true;
       }
 
-      if (node.type === 'action' && node.data?.type === 'connect_agent') {
-        const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
+      if (node.type === 'connect_agent') {
+  const text = node.data?.message || "🤝 Connecting you to an agent...";
+  await client.sendMessage(msg.from, text);
 
-        if (chat.agentId) {
-          const agent = await AgentModel.findById(chat.agentId);
-          if (agent) {
-            const text = `🤝 You are now connected with ${agent.name}`;
-            await client.sendMessage(msg.from, text);
-            console.log(`📤 Sent assignment message: ${text}`);
-          }
-        }
+  // assign agent
+  const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
+  if (chat?.agentId) {
+    const agent = await AgentModel.findById(chat.agentId);
+    const agentName = agent?.name || "our support team";
+    await client.sendMessage(msg.from, `🤝 You are now connected with ${agentName}`);
+    console.log(`📤 Sent assignment message to ${msg.from}`);
+  } else {
+    await client.sendMessage(msg.from, "⚠️ Sorry, no agent available right now.");
+  }
 
-        console.log(`🤝 Chat ${msg.from} auto-assigned to agent ${chat.agentId}`);
-        return 'agent_assigned';
-      }
+  return 'agent_assigned';
+}
+
 
       return false;
     };
@@ -678,12 +681,17 @@ client.on('message', async (msg) => {
       const msgLower = bodyLower;
       const routes = currentNode.data?.routes || [];
 
-      const matchedRoute = routes.find(r =>
-        (r.keywords || []).some(kw => {
-          const k = String(kw).toLowerCase().trim();
-          return (k.length <= 2 ? msgLower === k : msgLower.includes(k));
-        })
-      );
+    const matchedRoute = routes.find(r =>
+  (r.keywords || []).some(kw => {
+    const k = String(kw).toLowerCase().trim();
+    return (
+      msgLower === k ||
+      msgLower.includes(k) ||
+      k.startsWith(msgLower + " ")
+    );
+  })
+);
+
 
       const nextNodeId = matchedRoute ? matchedRoute.next : currentNode.data?.fallbackNext;
       let nextNode = nextNodeId ? getNode(nextNodeId) : null;
