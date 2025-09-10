@@ -1,6 +1,9 @@
 // controllers/chat.controller.js
-import { assignChatToAgent, autoAssignChat } from '../services/chat.service.js';
+import { autoAssignChat, assignChatToAgent } from '../services/chat.service.js';
 
+/**
+ * Assign chat (manual if agentId given, else auto-assign)
+ */
 export const assignChatController = async (req, res) => {
   const { chatId } = req.params;
   const { clientId, agentId } = req.body;
@@ -11,8 +14,8 @@ export const assignChatController = async (req, res) => {
     }
 
     const chat = agentId
-      ? await assignChatToAgent(clientId, chatId, agentId)          // manual
-      : await autoAssignChat(clientId, chatId);                      // automatic
+      ? await assignChatToAgent(clientId, chatId, agentId) // manual
+      : await autoAssignChat(clientId, chatId);            // auto
 
     res.json({ success: true, chat });
   } catch (err) {

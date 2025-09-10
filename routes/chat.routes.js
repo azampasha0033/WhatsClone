@@ -1,11 +1,11 @@
-// routes/chats.routes.js
+// routes/chat.routes.js
 import { Router } from 'express';
 import { assignChatController } from '../controllers/chat.controller.js';
 
 const router = Router();
 
+// Assign chat (manual or auto)
 // POST /api/chats/:chatId/assign
-// Body: { clientId: "xxx", agentId?: "yyy" }
 router.post('/:chatId/assign', assignChatController);
 
 export default router;
