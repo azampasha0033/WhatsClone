@@ -432,7 +432,6 @@ if(sent){
   /* ------------------------------- Chat Update ------------------------------ */
 
 
-
 /* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
@@ -474,23 +473,29 @@ client.on('message', async (msg) => {
       }
 
       if (node.type === 'connect_agent') {
-  const text = node.data?.message || "🤝 Connecting you to an agent...";
-  await client.sendMessage(msg.from, text);
+        const text = node.data?.message || "🤝 Connecting you to an agent...";
+        await client.sendMessage(msg.from, text);
 
-  // assign agent
-  const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
-  if (chat?.agentId) {
-    const agent = await AgentModel.findById(chat.agentId);
-    const agentName = agent?.name || "our support team";
-    await client.sendMessage(msg.from, `🤝 You are now connected with ${agentName}`);
-    console.log(`📤 Sent assignment message to ${msg.from}`);
-  } else {
-    await client.sendMessage(msg.from, "⚠️ Sorry, no agent available right now.");
-  }
+        // assign agent
+        const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
+        if (chat?.agentId) {
+          const agent = await AgentModel.findById(chat.agentId);
+          const agentName = agent?.name || "our support team";
 
-  return 'agent_assigned';
-}
+          // ✅ persist assignment
+          await Chat.findOneAndUpdate(
+            { clientId, chatId: msg.from },
+            { $set: { status: "assigned", agentId: chat.agentId } }
+          );
 
+          await client.sendMessage(msg.from, `🤝 You are now connected with ${agentName}`);
+          console.log(`📤 Sent assignment message to ${msg.from}`);
+        } else {
+          await client.sendMessage(msg.from, "⚠️ Sorry, no agent available right now.");
+        }
+
+        return 'agent_assigned';
+      }
 
       return false;
     };
@@ -506,7 +511,7 @@ client.on('message', async (msg) => {
           return node;
         }
 
-        if (['trigger','send_message','template','action'].includes(node.type)) {
+        if (['trigger','send_message','template','action','connect_agent'].includes(node.type)) {
           const result = await sendNodeMessage(node);
 
           if (result === 'agent_assigned') {
@@ -603,13 +608,13 @@ client.on('message', async (msg) => {
         if (!firstTrigger) return;
 
         const startNode = await advanceUntilWaitOrEnd(firstTrigger, flow);
-        await userFlowService.updateUserState(
-          null, // reset state
-          startNode.id
-        );
+
+        // ✅ Properly reset user flow state
+        await userFlowService.deleteUserState(clientId, msg.from, flow._id); // remove old state
+        await userFlowService.createUserState(clientId, msg.from, flow._id, startNode.id);
 
         console.log('➡️ Flow restarted at trigger:', firstTrigger.id, '→ current:', startNode.id);
-        return; // ✅ don’t continue old logic
+        return;
       }
     }
 
@@ -658,10 +663,10 @@ client.on('message', async (msg) => {
       if (currentNode.type === 'wait_for_reply') return;
     }
 
-    if (['trigger','send_message','template','action'].includes(currentNode.type)) {
+    if (['trigger','send_message','template','action','connect_agent'].includes(currentNode.type)) {
       const landed = await advanceUntilWaitOrEnd(currentNode, flow);
       await userFlowService.updateUserState(userState._id, landed.id);
-      if (landed.type === 'action' && landed.data?.type === 'connect_agent') return;
+      if (landed.type === 'connect_agent') return; // stop here
       if (landed.type === 'wait_for_reply') {
         console.log('⏳ Waiting for user reply at node:', landed.id);
         return;
@@ -681,17 +686,16 @@ client.on('message', async (msg) => {
       const msgLower = bodyLower;
       const routes = currentNode.data?.routes || [];
 
-    const matchedRoute = routes.find(r =>
-  (r.keywords || []).some(kw => {
-    const k = String(kw).toLowerCase().trim();
-    return (
-      msgLower === k ||
-      msgLower.includes(k) ||
-      k.startsWith(msgLower + " ")
-    );
-  })
-);
-
+      const matchedRoute = routes.find(r =>
+        (r.keywords || []).some(kw => {
+          const k = String(kw).toLowerCase().trim();
+          return (
+            msgLower === k ||
+            msgLower.includes(k) ||
+            k.startsWith(msgLower + " ")
+          );
+        })
+      );
 
       const nextNodeId = matchedRoute ? matchedRoute.next : currentNode.data?.fallbackNext;
       let nextNode = nextNodeId ? getNode(nextNodeId) : null;
@@ -700,7 +704,7 @@ client.on('message', async (msg) => {
       const landed = await advanceUntilWaitOrEnd(nextNode, flow);
       await userFlowService.updateUserState(userState._id, landed.id);
 
-      if (landed.type === 'action' && landed.data?.type === 'connect_agent') return;
+      if (landed.type === 'connect_agent') return;
       if (landed.type === 'wait_for_reply') {
         console.log('⏳ Waiting for user reply at node:', landed.id);
       } else if (landed.type === 'end') {
@@ -724,6 +728,7 @@ client.on('message', async (msg) => {
     console.error('❌ Message handler error:', err);
   }
 });
+
 
 
 
