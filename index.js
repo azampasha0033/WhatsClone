@@ -170,7 +170,7 @@ app.get('/chats/:clientId', async (req, res) => {
       unreadCount: chat.unreadCount,
       lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
       timestamp: chat.timestamp,
-      agentId: chat.agentId._serialized,
+      agentId: chat.agentId,
     }));
 
     global.io?.to(clientId).emit('chats-list', formatted);
