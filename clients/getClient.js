@@ -433,111 +433,15 @@ if(sent){
 
 
 
-
 /* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
     console.log('📨 New message received from:', msg.from, 'Body:', msg.body);
 
-    // --- Save message ---
-    await saveMessage(clientId, msg);
-    console.log('💾 Message saved successfully');
+    // -----------------------------------------------------------------------
+    // Helpers (MUST be declared before they’re used)
+    // -----------------------------------------------------------------------
 
-    // --- Emit message to frontend ---
-    const messageData = {
-      id: msg.id._serialized,
-      from: msg.from,
-      to: msg.to,
-      timestamp: msg.timestamp,
-      body: msg.body,
-      type: msg.type,
-      hasMedia: msg.hasMedia,
-      ack: msg.ack
-    };
-    global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
-
-    // ✅ Update last activity + reset inactivity timer
-    await Chat.findOneAndUpdate(
-      { clientId, chatId: msg.from },
-      { $set: { lastActivityAt: new Date() } },
-      { upsert: true }
-    );
-
-    if (inactivityTimers.has(msg.from)) {
-      clearTimeout(inactivityTimers.get(msg.from));
-    }
-
-    inactivityTimers.set(
-      msg.from,
-      setTimeout(async () => {
-        console.log(`⏳ Chat ${msg.from} inactive for 1 minute → closing.`);
-
-        await Chat.findOneAndUpdate(
-          { clientId, chatId: msg.from },
-          { $set: { status: 'closed' } }
-        );
-
-        // 🔔 Notify frontend
-        global.io?.to(clientId).emit('chat-closed', { chatId: msg.from });
-
-        // 📤 Send message to customer
-        await client.sendMessage(
-          msg.from,
-          "⏳ This chat has been closed due to inactivity. Please send a new message to restart."
-        );
-      }, 60 * 1000) // 1 minute
-    );
-
-    /* ---------------------------------------------------------------------- */
-    /* Chat status check                                                      */
-    /* ---------------------------------------------------------------------- */
-    let existingChat = await Chat.findOne({ clientId, chatId: msg.from }, { status: 1 });
-
-    if (existingChat) {
-      if (existingChat.status === 'assigned') {
-        console.log(`🙅 Chat ${msg.from} is already assigned to an agent. Skipping flow.`);
-        return; // stop flow handling
-      }
-
-      if (existingChat.status === 'closed') {
-        console.log(`♻️ Chat ${msg.from} was closed. Re-opening for new flow.`);
-        existingChat.status = 'pending';
-        await existingChat.save();
-
-        // 🔄 Restart flow immediately on reopen
-        const flows = await flowService.getFlows(clientId);
-        if (!flows || flows.length === 0) return;
-        const flow = flows[0];
-        const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
-        if (!firstTrigger) return;
-
-        const startNode = await advanceUntilWaitOrEnd(firstTrigger);
-        await userFlowService.updateUserState(
-          null, // force new state
-          startNode.id
-        );
-
-        console.log('➡️ Flow restarted at trigger:', firstTrigger.id, '→ current:', startNode.id);
-        return; // we already restarted, don’t continue old logic
-      }
-    }
-
-    /* ---------------------------------------------------------------------- */
-    /* Flow logic                                                             */
-    /* ---------------------------------------------------------------------- */
-    const flows = await flowService.getFlows(clientId);
-    if (!flows || flows.length === 0) return;
-    const flow = flows[0];
-
-    // Helpers
-    const getNode = (id) => flow.nodes.find(n => n.id === id);
-    const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
-    if (!firstTrigger) return;
-
-    const firstOutgoing = (nodeId) => flow.edges.find(e => e.source === nodeId);
-    const outgoingAll   = (nodeId) => flow.edges.filter(e => e.source === nodeId);
-
-    // --- Send messages / handle actions
     const sendNodeMessage = async (node) => {
       if (node.type === 'send_message') {
         const text = node.data?.message || node.data?.config?.message || '';
@@ -588,7 +492,10 @@ client.on('message', async (msg) => {
       return false;
     };
 
-    const advanceUntilWaitOrEnd = async (current) => {
+    const advanceUntilWaitOrEnd = async (current, flow) => {
+      const getNode = (id) => flow.nodes.find(n => n.id === id);
+      const firstOutgoing = (nodeId) => flow.edges.find(e => e.source === nodeId);
+
       let node = current;
 
       while (node) {
@@ -598,6 +505,7 @@ client.on('message', async (msg) => {
 
         if (['trigger','send_message','template','action'].includes(node.type)) {
           const result = await sendNodeMessage(node);
+
           if (result === 'agent_assigned') {
             console.log('🛑 Flow stopped because agent took over.');
             return node;
@@ -619,9 +527,101 @@ client.on('message', async (msg) => {
       return current;
     };
 
-    /* ---------------------------------------------------------------------- */
-    /* Restart / state handling                                               */
-    /* ---------------------------------------------------------------------- */
+    // -----------------------------------------------------------------------
+    // Save + emit incoming message
+    // -----------------------------------------------------------------------
+    await saveMessage(clientId, msg);
+    console.log('💾 Message saved successfully');
+
+    const messageData = {
+      id: msg.id._serialized,
+      from: msg.from,
+      to: msg.to,
+      timestamp: msg.timestamp,
+      body: msg.body,
+      type: msg.type,
+      hasMedia: msg.hasMedia,
+      ack: msg.ack
+    };
+    global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+
+    // -----------------------------------------------------------------------
+    // Inactivity timer
+    // -----------------------------------------------------------------------
+    await Chat.findOneAndUpdate(
+      { clientId, chatId: msg.from },
+      { $set: { lastActivityAt: new Date() } },
+      { upsert: true }
+    );
+
+    if (inactivityTimers.has(msg.from)) {
+      clearTimeout(inactivityTimers.get(msg.from));
+    }
+
+    inactivityTimers.set(
+      msg.from,
+      setTimeout(async () => {
+        console.log(`⏳ Chat ${msg.from} inactive for 1 minute → closing.`);
+
+        await Chat.findOneAndUpdate(
+          { clientId, chatId: msg.from },
+          { $set: { status: 'closed' } }
+        );
+
+        global.io?.to(clientId).emit('chat-closed', { chatId: msg.from });
+
+        await client.sendMessage(
+          msg.from,
+          "⏳ This chat has been closed due to inactivity. Please send a new message to restart."
+        );
+      }, 60 * 1000)
+    );
+
+    // -----------------------------------------------------------------------
+    // Chat status check
+    // -----------------------------------------------------------------------
+    let existingChat = await Chat.findOne({ clientId, chatId: msg.from }, { status: 1 });
+
+    if (existingChat) {
+      if (existingChat.status === 'assigned') {
+        console.log(`🙅 Chat ${msg.from} is already assigned to an agent. Skipping flow.`);
+        return;
+      }
+
+      if (existingChat.status === 'closed') {
+        console.log(`♻️ Chat ${msg.from} was closed. Re-opening for new flow.`);
+        existingChat.status = 'pending';
+        await existingChat.save();
+
+        const flows = await flowService.getFlows(clientId);
+        if (!flows || flows.length === 0) return;
+        const flow = flows[0];
+        const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+        if (!firstTrigger) return;
+
+        const startNode = await advanceUntilWaitOrEnd(firstTrigger, flow);
+        await userFlowService.updateUserState(
+          null, // reset state
+          startNode.id
+        );
+
+        console.log('➡️ Flow restarted at trigger:', firstTrigger.id, '→ current:', startNode.id);
+        return; // ✅ don’t continue old logic
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Flow execution
+    // -----------------------------------------------------------------------
+    const flows = await flowService.getFlows(clientId);
+    if (!flows || flows.length === 0) return;
+    const flow = flows[0];
+
+    const getNode = (id) => flow.nodes.find(n => n.id === id);
+    const outgoingAll = (nodeId) => flow.edges.filter(e => e.source === nodeId);
+    const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+    if (!firstTrigger) return;
+
     const restartKeywords = ['restart', '/start', 'start', 'menu', 'main menu', 'back to menu'];
     const bodyLower = (msg.body || '').toLowerCase().trim();
     const isRestart = restartKeywords.some(k => bodyLower === k || bodyLower.includes(k));
@@ -629,7 +629,7 @@ client.on('message', async (msg) => {
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
 
     const restartFlow = async () => {
-      const startNode = await advanceUntilWaitOrEnd(firstTrigger);
+      const startNode = await advanceUntilWaitOrEnd(firstTrigger, flow);
       await userFlowService.updateUserState(
         userState?._id || (await userFlowService.createUserState(clientId, msg.from, flow._id, startNode.id))._id,
         startNode.id
@@ -656,7 +656,7 @@ client.on('message', async (msg) => {
     }
 
     if (['trigger','send_message','template','action'].includes(currentNode.type)) {
-      const landed = await advanceUntilWaitOrEnd(currentNode);
+      const landed = await advanceUntilWaitOrEnd(currentNode, flow);
       await userFlowService.updateUserState(userState._id, landed.id);
       if (landed.type === 'action' && landed.data?.type === 'connect_agent') return;
       if (landed.type === 'wait_for_reply') {
@@ -689,7 +689,7 @@ client.on('message', async (msg) => {
       let nextNode = nextNodeId ? getNode(nextNodeId) : null;
       if (!nextNode) return;
 
-      const landed = await advanceUntilWaitOrEnd(nextNode);
+      const landed = await advanceUntilWaitOrEnd(nextNode, flow);
       await userFlowService.updateUserState(userState._id, landed.id);
 
       if (landed.type === 'action' && landed.data?.type === 'connect_agent') return;
@@ -706,7 +706,7 @@ client.on('message', async (msg) => {
       return;
     }
 
-    const parked = await advanceUntilWaitOrEnd(currentNode);
+    const parked = await advanceUntilWaitOrEnd(currentNode, flow);
     await userFlowService.updateUserState(userState._id, parked.id);
     if (parked.type === 'wait_for_reply') {
       console.log('⏳ Waiting for user reply at node:', parked.id);
@@ -716,8 +716,6 @@ client.on('message', async (msg) => {
     console.error('❌ Message handler error:', err);
   }
 });
-
-
 
 
 
