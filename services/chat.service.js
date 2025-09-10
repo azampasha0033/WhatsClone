@@ -1,39 +1,49 @@
-// services/chat.service.js
 import { Chat } from '../models/Chat.js';
 import { AgentModel } from '../models/agent.js';
 
-/**
- * Manual assignment: assign a chat to a specific agent
- */
-export const assignChatToAgent = async (clientId, chatId, agentId) => {
-  const agent = await AgentModel.findOne({ _id: agentId, clientId, status: 'active' });
-  if (!agent) throw new Error('Agent not found or not active for this client');
+// Simple round-robin tracker
+let lastAssignedIndex = 0;
 
-  const chat = await Chat.findOneAndUpdate(
-    { clientId, chatId },
-    { agentId: agent._id, status: 'assigned' },
-    { new: true }
-  );
+export const autoAssignChat = async (clientId, chatId, chatName = '') => {
+  // Check if chat exists
+  let chat = await Chat.findOne({ clientId, chatId });
 
-  if (!chat) throw new Error('Chat not found');
+  // If already assigned, return it
+  if (chat && chat.agentId) return chat;
 
-  return chat;
-};
+  // Get all active agents for this client
+  const agents = await AgentModel.find({ clientId, status: 'active' }).sort({ createdAt: 1 });
+  if (!agents.length) {
+    console.warn(`⚠️ No agents available for client ${clientId}`);
+    return chat || null;
+  }
 
-/**
- * Automatic assignment: pick the first available active agent
- */
-export const autoAssignChat = async (clientId, chatId) => {
-  const agent = await AgentModel.findOne({ clientId, status: 'active' }).sort({ createdAt: 1 });
-  if (!agent) throw new Error('No active agent available');
+  // Round-robin pick
+  const agent = agents[lastAssignedIndex % agents.length];
+  lastAssignedIndex++;
 
-  const chat = await Chat.findOneAndUpdate(
-    { clientId, chatId },
-    { agentId: agent._id, status: 'assigned' },
-    { new: true }
-  );
+  if (!chat) {
+    // create new chat & assign
+    chat = await Chat.create({
+      clientId,
+      chatId,
+      name: chatName,
+      agentId: agent._id,
+      status: 'assigned'
+    });
+  } else {
+    // update existing chat
+    chat.agentId = agent._id;
+    chat.status = 'assigned';
+    chat.updatedAt = new Date();
+    await chat.save();
+  }
 
-  if (!chat) throw new Error('Chat not found');
+  // Notify frontend in real time
+  global.io?.to(clientId).emit('chat-assigned', {
+    chatId,
+    agentId: agent._id,
+  });
 
   return chat;
 };

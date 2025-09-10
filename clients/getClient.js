@@ -16,7 +16,7 @@ import { userFlowService } from "../services/userFlowService.js";
 import { flowService } from "../services/flow.service.js";
 import { Template } from "../models/Template.js"; // if using templates
 
-
+import { autoAssignChat } from '../services/chat.service.js'; 
 
 
 import fs from 'fs';
@@ -404,6 +404,8 @@ if(sent){
 
   /* ------------------------------- Chat Update ------------------------------ */
 
+
+
 /* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
@@ -439,6 +441,7 @@ client.on('message', async (msg) => {
     const firstOutgoing = (nodeId) => flow.edges.find(e => e.source === nodeId);
     const outgoingAll   = (nodeId) => flow.edges.filter(e => e.source === nodeId);
 
+    // send messages / handle actions
     const sendNodeMessage = async (node) => {
       // send_message
       if (node.type === 'send_message') {
@@ -449,7 +452,8 @@ client.on('message', async (msg) => {
         }
         return true;
       }
-      // template (fallback to text if needed)
+
+      // template
       if (node.type === 'template') {
         const tplId = node.data?.config?.templateId;
         if (tplId) {
@@ -461,6 +465,7 @@ client.on('message', async (msg) => {
         }
         return true;
       }
+
       // action:send_message
       if (node.type === 'action' && node.data?.type === 'send_message') {
         const text = node.data?.message || node.data?.config?.message || '';
@@ -470,54 +475,60 @@ client.on('message', async (msg) => {
         }
         return true;
       }
+
+      // action:connect_agent (NEW)
+      if (node.type === 'action' && node.data?.type === 'connect_agent') {
+        const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
+        console.log(`🤝 Chat ${msg.from} auto-assigned to agent ${chat.agentId}`);
+        return 'agent_assigned';
+      }
+
       return false;
     };
 
-    // Advance automatically through non-interactive nodes until we hit wait_for_reply or end.
+    // Advance until wait_for_reply, end, or agent_assigned
     const advanceUntilWaitOrEnd = async (current) => {
       let node = current;
 
       while (node) {
-        // If we reached a wait node or end, stop here
         if (node.type === 'wait_for_reply' || node.type === 'end') {
           return node;
         }
 
-        // For trigger/send/template/action, send if applicable, then step to next
         if (['trigger','send_message','template','action'].includes(node.type)) {
-          // Send when applicable
-          await sendNodeMessage(node);
+          const result = await sendNodeMessage(node);
 
-          // Move to next via the **first** outgoing edge
+          // stop if agent got assigned
+          if (result === 'agent_assigned') {
+            console.log('🛑 Flow stopped because agent took over.');
+            return node;
+          }
+
           const edge = firstOutgoing(node.id);
-          if (!edge) return node; // nowhere to go
+          if (!edge) return node;
           node = getNode(edge.target);
           continue;
         }
 
-        // For route_by_keyword: we should only arrive here AFTER a user reply, so stop.
         if (node.type === 'route_by_keyword') {
           return node;
         }
 
-        // Unknown: stop defensively
         return node;
       }
 
       return current;
     };
 
-    // Restart commands (explicit only; do NOT include 'hello')
-    const restartKeywords = [
-      'restart', '/start', 'start', 'menu', 'main menu', 'back to menu'
-    ];
+    // Restart commands
+    const restartKeywords = ['restart', '/start', 'start', 'menu', 'main menu', 'back to menu'];
     const bodyLower = (msg.body || '').toLowerCase().trim();
     const isRestart = restartKeywords.some(k => bodyLower === k || bodyLower.includes(k));
 
     // --- Get or create user state ---
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
 
-    // Utility to (re)start flow from trigger and land on the first wait node (sending messages en route)
+    // restart flow
     const restartFlow = async () => {
       const startNode = await advanceUntilWaitOrEnd(firstTrigger);
       await userFlowService.updateUserState(
@@ -528,58 +539,50 @@ client.on('message', async (msg) => {
       return startNode;
     };
 
-    // If no state yet, create and advance to first wait node
+    // no state yet
     if (!userState) {
       const atNode = await restartFlow();
-      // If it’s a wait node, we’re done until the user replies
       if (atNode.type === 'wait_for_reply') return;
-      // If somehow not a wait node, just stop
       return;
     }
 
-    // If explicit restart OR current node is 'end', restart
+    // restart if needed
     if (isRestart || getNode(userState.currentNodeId)?.type === 'end') {
       await restartFlow();
       return;
     }
 
-    // --- Normal handling ---
+    // normal handling
     let currentNode = getNode(userState.currentNodeId);
     if (!currentNode) {
-      // state points to nowhere → restart safely
       currentNode = await restartFlow();
       if (currentNode.type === 'wait_for_reply') return;
     }
 
-    // If we are on a "send"/"action"/"trigger" due to some mismatch, advance to the next wait node
     if (['trigger','send_message','template','action'].includes(currentNode.type)) {
-      currentNode = await advanceUntilWaitOrEnd(currentNode);
-      await userFlowService.updateUserState(userState._id, currentNode.id);
-      // If that landed us on a wait node, we now wait for user input
-      if (currentNode.type === 'wait_for_reply') {
-        console.log('⏳ Waiting for user reply at node:', currentNode.id);
+      const landed = await advanceUntilWaitOrEnd(currentNode);
+      await userFlowService.updateUserState(userState._id, landed.id);
+
+      // if agent took over, stop
+      if (landed.type === 'action' && landed.data?.type === 'connect_agent') {
+        return;
+      }
+
+      if (landed.type === 'wait_for_reply') {
+        console.log('⏳ Waiting for user reply at node:', landed.id);
         return;
       }
     }
 
-    // If on a wait node, the *next* node should be the router. Move to it, do NOT consume again.
     if (currentNode.type === 'wait_for_reply') {
       const edges = outgoingAll(currentNode.id);
-      // Expect exactly one router next; if more, pick first
       const routerEdge = edges[0];
-      if (!routerEdge) {
-        console.warn('⚠️ wait_for_reply has no outgoing edges. Staying put.');
-        return;
-      }
+      if (!routerEdge) return;
       const routerNode = getNode(routerEdge.target);
-      if (!routerNode || routerNode.type !== 'route_by_keyword') {
-        console.warn('⚠️ wait_for_reply does not lead to route_by_keyword. Staying put.');
-        return;
-      }
+      if (!routerNode || routerNode.type !== 'route_by_keyword') return;
       currentNode = routerNode;
     }
 
-    // Now we expect currentNode to be a router
     if (currentNode.type === 'route_by_keyword') {
       const msgLower = bodyLower;
       const routes = currentNode.data?.routes || [];
@@ -587,7 +590,6 @@ client.on('message', async (msg) => {
       const matchedRoute = routes.find(r =>
         (r.keywords || []).some(kw => {
           const k = String(kw).toLowerCase().trim();
-          // match either exact number or substring for words
           return (k.length <= 2 ? msgLower === k : msgLower.includes(k));
         })
       );
@@ -595,28 +597,16 @@ client.on('message', async (msg) => {
       const nextNodeId = matchedRoute ? matchedRoute.next : currentNode.data?.fallbackNext;
       let nextNode = nextNodeId ? getNode(nextNodeId) : null;
 
-      if (!nextNode) {
-        // Hard fallback: try a generic help if present; else end
-        const helpNode = flow.nodes.find(n => n.id === 'send-help') || flow.nodes.find(n => n.type === 'send_message');
-        if (helpNode) {
-          await sendNodeMessage(helpNode);
-          await userFlowService.updateUserState(userState._id, helpNode.id);
-          console.log('ℹ️ Fallback help sent.');
-          // After help, try to advance to next wait (if any)
-          const landed = await advanceUntilWaitOrEnd(helpNode);
-          await userFlowService.updateUserState(userState._id, landed.id);
-        } else {
-          const endNode = flow.nodes.find(n => n.type === 'end');
-          if (endNode) {
-            await userFlowService.updateUserState(userState._id, endNode.id);
-          }
-        }
+      if (!nextNode) return;
+
+      const landed = await advanceUntilWaitOrEnd(nextNode);
+      await userFlowService.updateUserState(userState._id, landed.id);
+
+      // if agent took over, stop
+      if (landed.type === 'action' && landed.data?.type === 'connect_agent') {
         return;
       }
 
-      // If next node sends something, send & advance to the next wait/end automatically
-      const landed = await advanceUntilWaitOrEnd(nextNode);
-      await userFlowService.updateUserState(userState._id, landed.id);
       if (landed.type === 'wait_for_reply') {
         console.log('⏳ Waiting for user reply at node:', landed.id);
       } else if (landed.type === 'end') {
@@ -625,13 +615,11 @@ client.on('message', async (msg) => {
       return;
     }
 
-    // If it’s end, do nothing unless they /start again
     if (currentNode.type === 'end') {
       console.log('✅ Conversation ended (idle):', currentNode.data?.reason || 'No reason');
       return;
     }
 
-    // Anything else: safely attempt to advance and park
     const parked = await advanceUntilWaitOrEnd(currentNode);
     await userFlowService.updateUserState(userState._id, parked.id);
     if (parked.type === 'wait_for_reply') {
@@ -642,6 +630,7 @@ client.on('message', async (msg) => {
     console.error('❌ Message handler error:', err);
   }
 });
+
 
 
 
