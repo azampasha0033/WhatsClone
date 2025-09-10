@@ -18,12 +18,16 @@ import { Template } from "../models/Template.js"; // if using templates
 
 import { autoAssignChat } from '../services/chat.service.js'; 
 import { Chat } from '../models/Chat.js';
+import { AgentModel } from '../models/agent.js';
 
 import fs from 'fs';
 import path from 'path';
 
 // ⬇️ NEW: quota services
 import { assertCanSendMessage, incrementUsage } from '../services/quota.js';
+
+// store inactivity timers per chat
+const inactivityTimers = new Map();
 
 // ----------------------------- In-Memory Stores ----------------------------
 const clients = new Map();
@@ -406,7 +410,14 @@ if(sent){
 
 
 
-/* ------------------------------- New Message ------------------------------ */
+
+import { Chat } from './models/Chat.js';
+import { AgentModel } from './models/agent.js';
+import { autoAssignChat } from './services/chat.service.js';
+
+// store inactivity timers per chat
+const inactivityTimers = new Map();
+
 /* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
@@ -428,6 +439,27 @@ client.on('message', async (msg) => {
       ack: msg.ack
     };
     global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+
+    // ✅ Update last activity + reset inactivity timer
+    await Chat.findOneAndUpdate(
+      { clientId, chatId: msg.from },
+      { $set: { lastActivityAt: new Date() } },
+      { upsert: true }
+    );
+    if (inactivityTimers.has(msg.from)) {
+      clearTimeout(inactivityTimers.get(msg.from));
+    }
+    inactivityTimers.set(
+      msg.from,
+      setTimeout(async () => {
+        console.log(`⏳ Chat ${msg.from} inactive for 1 minute → closing.`);
+        await Chat.findOneAndUpdate(
+          { clientId, chatId: msg.from },
+          { $set: { status: 'closed' } }
+        );
+        global.io?.to(clientId).emit('chat-closed', { chatId: msg.from });
+      }, 60 * 1000) // 1 min
+    );
 
     // ✅ Check if chat is already assigned
     const existingChat = await Chat.findOne({ clientId, chatId: msg.from }, { status: 1 });
@@ -484,6 +516,17 @@ client.on('message', async (msg) => {
       // ✅ NEW: action:connect_agent
       if (node.type === 'action' && node.data?.type === 'connect_agent') {
         const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
+
+        // fetch agent details for message
+        if (chat.agentId) {
+          const agent = await AgentModel.findById(chat.agentId);
+          if (agent) {
+            const text = `🤝 You are now connected with ${agent.name}`;
+            await client.sendMessage(msg.from, text);
+            console.log(`📤 Sent assignment message: ${text}`);
+          }
+        }
+
         console.log(`🤝 Chat ${msg.from} auto-assigned to agent ${chat.agentId}`);
         return 'agent_assigned';
       }
