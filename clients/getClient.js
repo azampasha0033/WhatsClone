@@ -490,11 +490,21 @@ client.on('message', async (msg) => {
     );
 
     // ✅ Check if chat is already assigned
-    const existingChat = await Chat.findOne({ clientId, chatId: msg.from }, { status: 1 });
-    if (existingChat && existingChat.status === 'assigned') {
-      console.log(`🙅 Chat ${msg.from} is already assigned to an agent. Skipping flow.`);
-      return; // stop flow handling
-    }
+// ✅ Check chat status
+let existingChat = await Chat.findOne({ clientId, chatId: msg.from }, { status: 1 });
+
+if (existingChat) {
+  if (existingChat.status === 'assigned') {
+    console.log(`🙅 Chat ${msg.from} is already assigned to an agent. Skipping flow.`);
+    return; // stop flow handling
+  }
+
+  if (existingChat.status === 'closed') {
+    console.log(`♻️ Chat ${msg.from} was closed. Re-opening for new flow.`);
+    existingChat.status = 'pending';
+    await existingChat.save();
+  }
+}
 
     // --- Fetch flows for client ---
     const flows = await flowService.getFlows(clientId);
