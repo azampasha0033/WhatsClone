@@ -434,7 +434,6 @@ if(sent){
 
 
 
-
 /* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
@@ -489,24 +488,43 @@ client.on('message', async (msg) => {
       }, 60 * 1000) // 1 minute
     );
 
-    // ✅ Check if chat is already assigned
-// ✅ Check chat status
-let existingChat = await Chat.findOne({ clientId, chatId: msg.from }, { status: 1 });
+    /* ---------------------------------------------------------------------- */
+    /* Chat status check                                                      */
+    /* ---------------------------------------------------------------------- */
+    let existingChat = await Chat.findOne({ clientId, chatId: msg.from }, { status: 1 });
 
-if (existingChat) {
-  if (existingChat.status === 'assigned') {
-    console.log(`🙅 Chat ${msg.from} is already assigned to an agent. Skipping flow.`);
-    return; // stop flow handling
-  }
+    if (existingChat) {
+      if (existingChat.status === 'assigned') {
+        console.log(`🙅 Chat ${msg.from} is already assigned to an agent. Skipping flow.`);
+        return; // stop flow handling
+      }
 
-  if (existingChat.status === 'closed') {
-    console.log(`♻️ Chat ${msg.from} was closed. Re-opening for new flow.`);
-    existingChat.status = 'pending';
-    await existingChat.save();
-  }
-}
+      if (existingChat.status === 'closed') {
+        console.log(`♻️ Chat ${msg.from} was closed. Re-opening for new flow.`);
+        existingChat.status = 'pending';
+        await existingChat.save();
 
-    // --- Fetch flows for client ---
+        // 🔄 Restart flow immediately on reopen
+        const flows = await flowService.getFlows(clientId);
+        if (!flows || flows.length === 0) return;
+        const flow = flows[0];
+        const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+        if (!firstTrigger) return;
+
+        const startNode = await advanceUntilWaitOrEnd(firstTrigger);
+        await userFlowService.updateUserState(
+          null, // force new state
+          startNode.id
+        );
+
+        console.log('➡️ Flow restarted at trigger:', firstTrigger.id, '→ current:', startNode.id);
+        return; // we already restarted, don’t continue old logic
+      }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Flow logic                                                             */
+    /* ---------------------------------------------------------------------- */
     const flows = await flowService.getFlows(clientId);
     if (!flows || flows.length === 0) return;
     const flow = flows[0];
@@ -551,11 +569,9 @@ if (existingChat) {
         return true;
       }
 
-      // ✅ NEW: action:connect_agent
       if (node.type === 'action' && node.data?.type === 'connect_agent') {
         const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
 
-        // fetch agent details for message
         if (chat.agentId) {
           const agent = await AgentModel.findById(chat.agentId);
           if (agent) {
@@ -572,7 +588,6 @@ if (existingChat) {
       return false;
     };
 
-    // --- Advance until wait_for_reply, end, or agent_assigned
     const advanceUntilWaitOrEnd = async (current) => {
       let node = current;
 
@@ -583,8 +598,6 @@ if (existingChat) {
 
         if (['trigger','send_message','template','action'].includes(node.type)) {
           const result = await sendNodeMessage(node);
-
-          // stop if agent got assigned
           if (result === 'agent_assigned') {
             console.log('🛑 Flow stopped because agent took over.');
             return node;
@@ -606,12 +619,13 @@ if (existingChat) {
       return current;
     };
 
-    // --- Restart commands
+    /* ---------------------------------------------------------------------- */
+    /* Restart / state handling                                               */
+    /* ---------------------------------------------------------------------- */
     const restartKeywords = ['restart', '/start', 'start', 'menu', 'main menu', 'back to menu'];
     const bodyLower = (msg.body || '').toLowerCase().trim();
     const isRestart = restartKeywords.some(k => bodyLower === k || bodyLower.includes(k));
 
-    // --- Get or create user state
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
 
     const restartFlow = async () => {
@@ -644,12 +658,7 @@ if (existingChat) {
     if (['trigger','send_message','template','action'].includes(currentNode.type)) {
       const landed = await advanceUntilWaitOrEnd(currentNode);
       await userFlowService.updateUserState(userState._id, landed.id);
-
-      // stop if agent took over
-      if (landed.type === 'action' && landed.data?.type === 'connect_agent') {
-        return;
-      }
-
+      if (landed.type === 'action' && landed.data?.type === 'connect_agent') return;
       if (landed.type === 'wait_for_reply') {
         console.log('⏳ Waiting for user reply at node:', landed.id);
         return;
@@ -683,11 +692,7 @@ if (existingChat) {
       const landed = await advanceUntilWaitOrEnd(nextNode);
       await userFlowService.updateUserState(userState._id, landed.id);
 
-      // stop if agent took over
-      if (landed.type === 'action' && landed.data?.type === 'connect_agent') {
-        return;
-      }
-
+      if (landed.type === 'action' && landed.data?.type === 'connect_agent') return;
       if (landed.type === 'wait_for_reply') {
         console.log('⏳ Waiting for user reply at node:', landed.id);
       } else if (landed.type === 'end') {
