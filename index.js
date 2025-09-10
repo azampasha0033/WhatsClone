@@ -135,12 +135,12 @@ async function safeGetClient(clientId) {
 /*                                 ROUTES                                     */
 /* -------------------------------------------------------------------------- */
 
-// ✅ Chats with assignment details
+// ✅ Chats
 app.get('/chats/:clientId', async (req, res) => {
   try {
     let { clientId } = req.params;
 
-    // 🔑 Resolve Mongo ObjectId to clientId if needed
+    // 🔑 If we receive a Mongo ObjectId, resolve it to real clientId
     if (mongoose.Types.ObjectId.isValid(clientId)) {
       const record = await ClientModel.findById(clientId);
       if (record && record.clientId) {
@@ -163,22 +163,14 @@ app.get('/chats/:clientId', async (req, res) => {
       return res.status(500).json({ error: `Client ${clientId} needs restart` });
     }
 
-    // Merge with Mongo assignment info
-    const formatted = await Promise.all(
-      chats.map(async (chat) => {
-        const dbChat = await Chat.findOne(
-          { clientId, chatId: chat.id._serialized },
-          { agentId: 1, status: 1 }
-        ).populate('agentId', 'name email status'); // populate agent details
-
-        return {
-          id: chat.id._serialized,
-          name: chat.name,
-          isGroup: chat.isGroup,
-          unreadCount: chat.unreadCount,
-          lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
-          timestamp: chat.timestamp,
-          status: dbChat?.status || 'pending',
+    const formatted = chats.map(chat => ({
+      id: chat.id._serialized,
+      name: chat.name,
+      isGroup: chat.isGroup,
+      unreadCount: chat.unreadCount,
+      lastMessage: chat.lastMessage ? chat.lastMessage.body : null,
+      timestamp: chat.timestamp,
+        status: dbChat?.status || 'pending',
           agent: dbChat?.agentId
             ? {
                 _id: dbChat.agentId._id,
@@ -187,9 +179,7 @@ app.get('/chats/:clientId', async (req, res) => {
                 status: dbChat.agentId.status
               }
             : null
-        };
-      })
-    );
+    }));
 
     global.io?.to(clientId).emit('chats-list', formatted);
     return res.json({ clientId, chats: formatted });
@@ -199,7 +189,6 @@ app.get('/chats/:clientId', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
-
 
 // ✅ Messages
 app.get('/messages/:clientId/:chatId', async (req, res) => {
