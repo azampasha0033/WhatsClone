@@ -626,21 +626,45 @@ client.on('message', async (msg) => {
       }
     }
 
-    // -----------------------------------------------------------------------
-    // Flow execution
-    // -----------------------------------------------------------------------
-    const flows = await flowService.getFlows(clientId);
-    if (!flows || flows.length === 0) return;
-    const flow = flows[0];
+  // -----------------------------------------------------------------------
+// Flow execution
+// -----------------------------------------------------------------------
+const flows = await flowService.getFlows(clientId);
+if (!flows || flows.length === 0) return;
 
-    const getNode = (id) => flow.nodes.find(n => n.id === id);
-    const outgoingAll = (nodeId) => flow.edges.filter(e => e.source === nodeId);
-    const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
-    if (!firstTrigger) return;
+const bodyLower = (msg.body || '').toLowerCase().trim();
 
-    const restartKeywords = ['restart', '/start', 'start', 'menu', 'main menu', 'back to menu'];
-    const bodyLower = (msg.body || '').toLowerCase().trim();
-    const isRestart = restartKeywords.some(k => bodyLower === k || bodyLower.includes(k));
+// ✅ Try to pick the flow whose trigger keywords match the incoming message
+let flow = flows.find(f => {
+  const triggerNode = f.nodes.find(n => n.type === 'trigger');
+  if (!triggerNode) return false;
+
+  const keywords = triggerNode.data?.keywords || [];
+  return keywords.some(k => bodyLower.includes(k.toLowerCase()));
+});
+
+// fallback → use first flow if no keyword match
+if (!flow) {
+  flow = flows[0];
+}
+
+const getNode = (id) => flow.nodes.find(n => n.id === id);
+const outgoingAll = (nodeId) => flow.edges.filter(e => e.source === nodeId);
+const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+if (!firstTrigger) return;
+
+
+
+
+// ✅ Use restart keywords from flow if available, otherwise fallback defaults
+const restartKeywords = (flow.data?.restartKeywords || [
+  'restart', '/start', 'start', 'menu', 'main menu', 'back to menu'
+]).map(k => k.toLowerCase());
+
+const isRestart = restartKeywords.some(k => 
+  bodyLower === k || bodyLower.includes(k)
+);
+
 
     let userState = await userFlowService.getUserState(clientId, msg.from, flow._id);
 
