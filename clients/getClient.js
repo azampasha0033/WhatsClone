@@ -445,18 +445,6 @@ const bodyLower = (msg.body || '').toLowerCase().trim();
     const sent = await client.sendMessage(msg.from, text);
     console.log('📤 Text message sent:', text);
 
-    // ✅ Mirror to socket
-    const messageData = {
-      id: sent.id._serialized,
-      from: client.info.wid._serialized, // bot's number
-      to: msg.from,
-      timestamp: Math.floor(Date.now() / 1000),
-      body: text,
-      type: 'chat',
-      hasMedia: false,
-      ack: sent.ack
-    };
-    global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
   }
   return true;
 }

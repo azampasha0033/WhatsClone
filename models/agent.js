@@ -49,6 +49,11 @@ const agentSchema = new mongoose.Schema(
       APIKEY: { type: Boolean, default: false },
     },
     status: { type: String, enum: ['active', 'inactive','deleted'], default: 'active' },
+     // 👤 Online presence
+ online: { type: Boolean, default: false },
+lastSeenAt: { type: Date, default: null },
+
+
   },
   { timestamps: true }
 );
@@ -57,3 +62,4 @@ const agentSchema = new mongoose.Schema(
 agentSchema.index({ clientId: 1, email: 1 }, { unique: true });
 
 export const AgentModel = mongoose.model('Agent', agentSchema);
+

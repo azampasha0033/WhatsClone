@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createAgentController, updateAgentController, loginAgentController, listAgentsController } from '../controllers/agent.controller.js'; 
+import { createAgentController, updateAgentController, loginAgentController, listAgentsController,logoutAgentController  } from '../controllers/agent.controller.js'; 
 import { deleteAgent } from '../services/agent.service.js'; 
 
 const router = Router();
@@ -9,6 +9,8 @@ router.post('/', createAgentController);
 
 // POST /api/agents/login - Login agent
 router.post('/login', loginAgentController);
+
+router.post('/logout', logoutAgentController );
 
 // GET /api/agents - List agents
 router.get('/', listAgentsController);

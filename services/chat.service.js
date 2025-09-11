@@ -20,9 +20,18 @@ export const autoAssignChat = async (clientId, chatId, chatName = '') => {
   if (chat && chat.agentId) return chat;
 
   // Get active agents
-  const agents = await AgentModel.find({ clientId, status: 'active' }).sort({ createdAt: 1 });
+  const agents = await AgentModel.find({ clientId, status: 'active', online: true  }).sort({ createdAt: 1 });
+
+
   if (!agents.length) {
+    const client = getClient(clientId);  // <-- pull WhatsApp client from your sessions
+    
     console.warn(`⚠️ No agents available for client ${clientId}`);
+
+        await client.sendMessage(
+      chatId,
+      `Sorry No agents available at the moment. Please try again later.`
+    );
     return chat || null;
   }
 

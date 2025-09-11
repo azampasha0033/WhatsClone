@@ -119,6 +119,11 @@ export const loginAgentController = async (req, res) => {
       return res.status(401).json({ error: 'Invalid password' });
     }
 
+        // ✅ Mark agent as online and reset lastSeenAt
+    agent.online = true;
+    agent.lastSeenAt = null;
+    await agent.save();
+
     // If login is successful, return all agent data (except passwordHash)
     res.status(200).json({
       success: true,
@@ -154,5 +159,44 @@ export const listAgentsController = async (req, res) => {
     res.json(agents);  // Return the list of agents
   } catch (err) {
     res.status(500).json({ error: err.message });  // Handle error
+  }
+};
+
+
+
+
+// Logout agent controller
+export const logoutAgentController = async (req, res) => {
+  try {
+    const { agentId } = req.body;
+
+    if (!agentId) {
+      return res.status(400).json({ error: "Agent ID is required" });
+    }
+
+    const agent = await AgentModel.findById(agentId);
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    // ✅ Mark as offline and update last seen
+    agent.online = false;
+    agent.lastSeenAt = new Date();
+    await agent.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Agent logged out successfully",
+      agent: {
+        _id: agent._id,
+        name: agent.name,
+        email: agent.email,
+        online: agent.online,
+        lastSeenAt: agent.lastSeenAt
+      }
+    });
+  } catch (err) {
+    console.error("Logout Error:", err);
+    res.status(500).json({ error: err.message });
   }
 };
