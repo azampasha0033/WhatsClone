@@ -1,6 +1,11 @@
+
+
 // services/chat.service.js
 import { Chat } from '../models/Chat.js';
 import { AgentModel } from '../models/agent.js';
+import { getClient } from '../clients/getClient.js'; // ✅ import your client getter
+
+
 
 // Simple round-robin tracker
 let lastAssignedIndex = 0;
@@ -49,8 +54,9 @@ export const autoAssignChat = async (clientId, chatId, chatName = '') => {
   return chat;
 };
 
+
 /**
- * Manually assign chat to a specific agent
+ * Manually assign chat to a specific agent (transfer support)
  */
 export const assignChatToAgent = async (clientId, chatId, agentId) => {
   const agent = await AgentModel.findOne({ _id: agentId, clientId, status: 'active' });
@@ -71,11 +77,24 @@ export const assignChatToAgent = async (clientId, chatId, agentId) => {
     await chat.save();
   }
 
-  // Emit assignment event
+  // Emit assignment event to frontend
   global.io?.to(clientId).emit('chat-assigned', {
     chatId,
     agentId: agent._id,
   });
+
+  // ✅ Notify customer of transfer
+  const client = getClient(clientId);  // <-- pull WhatsApp client from your sessions
+  if (client) {
+    const agentName = agent.name || "our support team";
+    await client.sendMessage(
+      chatId,
+      `🤝 You are now connected with ${agentName}`
+    );
+    console.log(`📤 Notified ${chatId}: transferred to ${agentName}`);
+  } else {
+    console.warn(`⚠️ No WA client found for ${clientId} → cannot send transfer message`);
+  }
 
   return chat;
 };
