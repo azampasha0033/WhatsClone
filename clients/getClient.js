@@ -428,6 +428,23 @@ if(sent){
 
 
 
+function emitFlowMessage(client, clientId, to, sent, body) {
+  global.io?.to(clientId).emit('new-message', {
+    clientId,
+    message: {
+      id: sent.id._serialized,
+      from: client.info.wid._serialized, // bot number
+      to,
+      timestamp: Math.floor(Date.now() / 1000),
+      body,
+      type: 'chat',
+      hasMedia: false,
+      ack: sent.ack
+    }
+  });
+}
+
+
 
   /* ------------------------------- Chat Update ------------------------------ */
 
@@ -448,6 +465,8 @@ const bodyLower = (msg.body || '').toLowerCase().trim();
         if (text) {
           await client.sendMessage(msg.from, text);
           console.log('📤 Text message sent:', text);
+          
+          emitFlowMessage(client, clientId, msg.from, sent, text);
         }
         return true;
       }
