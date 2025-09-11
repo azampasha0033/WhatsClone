@@ -625,41 +625,56 @@ inactivityTimers.set(
         return;
       }
 
-      if (existingChat.status === 'closed') {
-        console.log(`♻️ Chat ${msg.from} was closed. Re-opening for new flow.`);
-        existingChat.status = 'pending';
-        await existingChat.save();
+     if (existingChat.status === 'closed') {
+  console.log(`♻️ Chat ${msg.from} was closed. Re-opening for new flow.`);
+  existingChat.status = 'pending';
+  await existingChat.save();
 
-        const flows = await flowService.getFlows(clientId);
-        if (!flows || flows.length === 0) return;
-      
+  const flows = await flowService.getFlows(clientId);
+  if (!flows || flows.length === 0) return;
+  
+  let flow = flows.find(f => {
+    const triggerNode = f.nodes.find(n => n.type === 'trigger');
+    if (!triggerNode) return false;
 
-        let flow = flows.find(f => {
-  const triggerNode = f.nodes.find(n => n.type === 'trigger');
-  if (!triggerNode) return false;
+    const keywords = triggerNode.data?.config?.keywords || [];
+    return keywords.some(k => bodyLower === k.toLowerCase().trim());
+  });
 
-  const keywords = triggerNode.data?.config?.keywords || [];
-  return keywords.some(k => bodyLower === k.toLowerCase().trim());
-});
+  if (!flow) {
+    flow = flows[0]; // fallback → first flow
+  }
 
-// fallback → use first flow if nothing matched
-if (!flow) {
-  flow = flows[0];
+  const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+  if (!firstTrigger) return;
+
+  const startNode = await advanceUntilWaitOrEnd(firstTrigger, flow);
+
+  // ✅ Properly reset user flow state
+  await userFlowService.deleteUserState(clientId, msg.from, flow._id);
+  await userFlowService.createUserState(clientId, msg.from, flow._id, startNode.id);
+
+  // ✅ Send the first trigger message again to the user + socket
+  if (startNode.data?.message) {
+    const sent = await client.sendMessage(msg.from, startNode.data.message);
+
+    const flowMessageData = {
+      id: sent.id._serialized,
+      from: client.info.wid._serialized, // your WA business number
+      to: msg.from,
+      timestamp: Date.now(),
+      body: startNode.data.message,
+      type: 'chat',
+      hasMedia: false,
+      ack: sent.ack
+    };
+    global.io?.to(clientId).emit('new-message', { clientId, message: flowMessageData });
+  }
+
+  console.log('➡️ Flow restarted at trigger:', firstTrigger.id, '→ current:', startNode.id);
+  return;
 }
 
-const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
-if (!firstTrigger) return;
-
-const startNode = await advanceUntilWaitOrEnd(firstTrigger, flow);
-
-
-        // ✅ Properly reset user flow state
-        await userFlowService.deleteUserState(clientId, msg.from, flow._id); // remove old state
-        await userFlowService.createUserState(clientId, msg.from, flow._id, startNode.id);
-
-        console.log('➡️ Flow restarted at trigger:', firstTrigger.id, '→ current:', startNode.id);
-        return;
-      }
     }
 
   // -----------------------------------------------------------------------
