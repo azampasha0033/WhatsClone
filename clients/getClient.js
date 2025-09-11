@@ -472,30 +472,56 @@ client.on('message', async (msg) => {
         return true;
       }
 
-      if (node.type === 'connect_agent') {
-        const text = node.data?.message || "🤝 Connecting you to an agent...";
-        await client.sendMessage(msg.from, text);
+     if (node.type === 'connect_agent') {
+  const text = node.data?.message || "🤝 Connecting you to an agent...";
+  await client.sendMessage(msg.from, text);
 
-        // assign agent
-        const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
-        if (chat?.agentId) {
-          const agent = await AgentModel.findById(chat.agentId);
-          const agentName = agent?.name || "our support team";
+  // assign agent
+  const chat = await autoAssignChat(clientId, msg.from, msg._data?.notifyName || msg.from);
+  if (chat?.agentId) {
+    const agent = await AgentModel.findById(chat.agentId);
+    const agentName = agent?.name || "our support team";
 
-          // ✅ persist assignment
-          await Chat.findOneAndUpdate(
-            { clientId, chatId: msg.from },
-            { $set: { status: "assigned", agentId: chat.agentId } }
-          );
+    // ✅ persist assignment
+    await Chat.findOneAndUpdate(
+      { clientId, chatId: msg.from },
+      { $set: { status: "assigned", agentId: chat.agentId } }
+    );
 
-          await client.sendMessage(msg.from, `🤝 You are now connected with ${agentName}`);
-          console.log(`📤 Sent assignment message to ${msg.from}`);
-        } else {
-          await client.sendMessage(msg.from, "⚠️ Sorry, no agent available right now.");
-        }
+    await client.sendMessage(msg.from, `🤝 You are now connected with ${agentName}`);
+    console.log(`📤 Sent assignment message to ${msg.from}`);
 
-        return 'agent_assigned';
-      }
+    // ✅ Start inactivity timeout ONLY after agent connected
+    if (inactivityTimers.has(msg.from)) {
+      clearTimeout(inactivityTimers.get(msg.from));
+    }
+
+    inactivityTimers.set(
+      msg.from,
+      setTimeout(async () => {
+        console.log(`⏳ Chat ${msg.from} inactive for 1 minute → closing.`);
+
+        await Chat.findOneAndUpdate(
+          { clientId, chatId: msg.from },
+          { $set: { status: 'closed' } }
+        );
+
+        global.io?.to(clientId).emit('chat-closed', { chatId: msg.from });
+
+        await client.sendMessage(
+          msg.from,
+          "⏳ This chat has been closed due to inactivity. Please send a new message to restart."
+        );
+      }, 60 * 1000) // 1 minute
+    );
+
+  } else {
+    await client.sendMessage(msg.from, "⚠️ Sorry, no agent available right now.");
+  }
+
+  return 'agent_assigned';
+}
+
 
       return false;
     };
@@ -566,24 +592,6 @@ client.on('message', async (msg) => {
       clearTimeout(inactivityTimers.get(msg.from));
     }
 
-    inactivityTimers.set(
-      msg.from,
-      setTimeout(async () => {
-        console.log(`⏳ Chat ${msg.from} inactive for 1 minute → closing.`);
-
-        await Chat.findOneAndUpdate(
-          { clientId, chatId: msg.from },
-          { $set: { status: 'closed' } }
-        );
-
-        global.io?.to(clientId).emit('chat-closed', { chatId: msg.from });
-
-        await client.sendMessage(
-          msg.from,
-          "⏳ This chat has been closed due to inactivity. Please send a new message to restart."
-        );
-      }, 60 * 1000)
-    );
 
     // -----------------------------------------------------------------------
     // Chat status check
