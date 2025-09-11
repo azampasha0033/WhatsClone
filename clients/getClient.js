@@ -640,7 +640,13 @@ let flow = flows.find(f => {
   if (!triggerNode) return false;
 
   const keywords = triggerNode.data?.keywords || [];
-  return keywords.some(k => bodyLower.includes(k.toLowerCase()));
+
+  return keywords.some(k => {
+  const keyword = k.toLowerCase().trim();
+  return bodyLower === keyword; // ✅ exact match
+});
+
+
 });
 
 // fallback → use first flow if no keyword match
@@ -684,10 +690,33 @@ const isRestart = restartKeywords.some(k =>
       return;
     }
 
-    if (isRestart || getNode(userState.currentNodeId)?.type === 'end') {
-      await restartFlow();
-      return;
-    }
+ if (isRestart || getNode(userState.currentNodeId)?.type === 'end') {
+  // 🔄 Re-check flows again based on current message
+  let newFlow = flows.find(f => {
+    const triggerNode = f.nodes.find(n => n.type === 'trigger');
+    if (!triggerNode) return false;
+
+    const keywords = triggerNode.data?.keywords || [];
+    return keywords.some(k => bodyLower.includes(k.toLowerCase()));
+  });
+
+  if (!newFlow) {
+    newFlow = flows[0]; // fallback if no keyword match
+  }
+
+  const newFirstTrigger = newFlow.nodes.find(n => n.type === 'trigger');
+  if (!newFirstTrigger) return;
+
+  const startNode = await advanceUntilWaitOrEnd(newFirstTrigger, newFlow);
+
+  // ✅ Reset user state to the new flow
+  await userFlowService.deleteUserState(clientId, msg.from, newFlow._id);
+  await userFlowService.createUserState(clientId, msg.from, newFlow._id, startNode.id);
+
+  console.log('🔄 Flow switched on restart. Now using flow:', newFlow._id, '→ node:', startNode.id);
+  return;
+}
+
 
     let currentNode = getNode(userState.currentNodeId);
     if (!currentNode) {
