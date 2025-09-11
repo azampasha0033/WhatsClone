@@ -428,27 +428,6 @@ if(sent){
 
 
 
-function emitFlowMessage(client, clientId, to, sent, body) {
-  global.io?.to(clientId).emit('new-message', {
-    clientId,
-    message: {
-      id: sent.id._serialized,
-      from: client.info.wid._serialized, // bot number
-      to,
-      timestamp: Math.floor(Date.now() / 1000),
-      body,
-      type: 'chat',
-      hasMedia: false,
-      ack: sent.ack
-    }
-  });
-}
-
-
-
-  /* ------------------------------- Chat Update ------------------------------ */
-
-
 /* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
@@ -460,16 +439,28 @@ client.on('message', async (msg) => {
 
 const bodyLower = (msg.body || '').toLowerCase().trim();
     const sendNodeMessage = async (node) => {
-      if (node.type === 'send_message') {
-        const text = node.data?.message || node.data?.config?.message || '';
-        if (text) {
-          await client.sendMessage(msg.from, text);
-          console.log('📤 Text message sent:', text);
-          
-          emitFlowMessage(client, clientId, msg.from, sent, text);
-        }
-        return true;
-      }
+    if (node.type === 'send_message') {
+  const text = node.data?.message || node.data?.config?.message || '';
+  if (text) {
+    const sent = await client.sendMessage(msg.from, text);
+    console.log('📤 Text message sent:', text);
+
+    // ✅ Mirror to socket
+    const messageData = {
+      id: sent.id._serialized,
+      from: client.info.wid._serialized, // bot's number
+      to: msg.from,
+      timestamp: Math.floor(Date.now() / 1000),
+      body: text,
+      type: 'chat',
+      hasMedia: false,
+      ack: sent.ack
+    };
+    global.io?.to(clientId).emit('new-message', { clientId, message: messageData });
+  }
+  return true;
+}
+
 
       if (node.type === 'template') {
         const tplId = node.data?.config?.templateId;
