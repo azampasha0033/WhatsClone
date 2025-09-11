@@ -639,15 +639,13 @@ let flow = flows.find(f => {
   const triggerNode = f.nodes.find(n => n.type === 'trigger');
   if (!triggerNode) return false;
 
-  const keywords = triggerNode.data?.keywords || [];
-
+  const keywords = triggerNode.data?.config?.keywords || [];
   return keywords.some(k => {
-  const keyword = k.toLowerCase().trim();
-  return bodyLower === keyword; // ✅ exact match
+    const keyword = k.toLowerCase().trim();
+    return bodyLower === keyword;
+  });
 });
 
-
-});
 
 // fallback → use first flow if no keyword match
 if (!flow) {
@@ -697,7 +695,11 @@ const isRestart = restartKeywords.some(k =>
     if (!triggerNode) return false;
 
     const keywords = triggerNode.data?.keywords || [];
-    return keywords.some(k => bodyLower.includes(k.toLowerCase()));
+  return keywords.some(k => {
+  const keyword = k.toLowerCase().trim();
+  return bodyLower === keyword;   // ✅ exact match
+});
+
   });
 
   if (!newFlow) {
