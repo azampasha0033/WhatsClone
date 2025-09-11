@@ -611,11 +611,25 @@ client.on('message', async (msg) => {
 
         const flows = await flowService.getFlows(clientId);
         if (!flows || flows.length === 0) return;
-        const flow = flows[0];
-        const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
-        if (!firstTrigger) return;
+      
+        let flow = flows.find(f => {
+  const triggerNode = f.nodes.find(n => n.type === 'trigger');
+  if (!triggerNode) return false;
 
-        const startNode = await advanceUntilWaitOrEnd(firstTrigger, flow);
+  const keywords = triggerNode.data?.config?.keywords || [];
+  return keywords.some(k => bodyLower === k.toLowerCase().trim());
+});
+
+// fallback → use first flow if nothing matched
+if (!flow) {
+  flow = flows[0];
+}
+
+const firstTrigger = flow.nodes.find(n => n.type === 'trigger');
+if (!firstTrigger) return;
+
+const startNode = await advanceUntilWaitOrEnd(firstTrigger, flow);
+
 
         // ✅ Properly reset user flow state
         await userFlowService.deleteUserState(clientId, msg.from, flow._id); // remove old state
