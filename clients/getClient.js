@@ -441,6 +441,7 @@ client.on('message', async (msg) => {
     // Helpers (MUST be declared before they’re used)
     // -----------------------------------------------------------------------
 
+const bodyLower = (msg.body || '').toLowerCase().trim();
     const sendNodeMessage = async (node) => {
       if (node.type === 'send_message') {
         const text = node.data?.message || node.data?.config?.message || '';
@@ -669,7 +670,6 @@ const startNode = await advanceUntilWaitOrEnd(firstTrigger, flow);
 const flows = await flowService.getFlows(clientId);
 if (!flows || flows.length === 0) return;
 
-const bodyLower = (msg.body || '').toLowerCase().trim();
 
 // ✅ Try to pick the flow whose trigger keywords match the incoming message
 let flow = flows.find(f => {
