@@ -582,15 +582,37 @@ client.on('message', async (msg) => {
     // -----------------------------------------------------------------------
     // Inactivity timer
     // -----------------------------------------------------------------------
+  await Chat.findOneAndUpdate(
+  { clientId, chatId: msg.from },
+  { $set: { lastActivityAt: new Date() } },
+  { upsert: true }
+);
+
+// 🔄 Clear any existing inactivity timer
+if (inactivityTimers.has(msg.from)) {
+  clearTimeout(inactivityTimers.get(msg.from));
+}
+
+// ✅ Always set a fallback inactivity timer (e.g., 5 minutes)
+// This will close chats where the user never replies again
+inactivityTimers.set(
+  msg.from,
+  setTimeout(async () => {
+    console.log(`⏳ Chat ${msg.from} inactive for 5 minutes → closing.`);
+
     await Chat.findOneAndUpdate(
       { clientId, chatId: msg.from },
-      { $set: { lastActivityAt: new Date() } },
-      { upsert: true }
+      { $set: { status: 'closed' } }
     );
 
-    if (inactivityTimers.has(msg.from)) {
-      clearTimeout(inactivityTimers.get(msg.from));
-    }
+    global.io?.to(clientId).emit('chat-closed', { chatId: msg.from });
+
+    await client.sendMessage(
+      msg.from,
+      "⏳ This chat has been closed due to inactivity."
+    );
+  }, 5 * 60 * 1000) // 5 minutes
+);
 
 
     // -----------------------------------------------------------------------
@@ -612,6 +634,7 @@ client.on('message', async (msg) => {
         const flows = await flowService.getFlows(clientId);
         if (!flows || flows.length === 0) return;
       
+
         let flow = flows.find(f => {
   const triggerNode = f.nodes.find(n => n.type === 'trigger');
   if (!triggerNode) return false;
