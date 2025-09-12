@@ -3,8 +3,9 @@
 // services/chat.service.js
 import { Chat } from '../models/Chat.js';
 import { AgentModel } from '../models/agent.js';
-import { getClient } from '../clients/getClient.js'; // ✅ import your client getter
+import { getClient } from '../clients/getClient.js'; 
 
+import { assertCanSendMessage, incrementUsage } from './quota.js';
 
 
 // Simple round-robin tracker
@@ -40,14 +41,6 @@ export const autoAssignChat = async (clientId, chatId, chatName = '') => {
     const client = getClient(clientId);
     console.warn(`⚠️ No agents available for client ${clientId}`);
 
-    if (client) {
-      await client.sendMessage(
-        chatId,
-        `⚠️ Sorry, no agents are available right now. Please try again later.`
-      );
-    }
-
-    // 🚫 Always return null here so handler won't send 🤝
     return null;
   }
 
@@ -87,6 +80,7 @@ export const autoAssignChat = async (clientId, chatId, chatName = '') => {
  * Manually assign chat to a specific agent (transfer support)
  */
 export const assignChatToAgent = async (clientId, chatId, agentId) => {
+    const { sub } = await assertCanSendMessage(clientId);
   const agent = await AgentModel.findOne({ _id: agentId, clientId, status: 'active' });
   if (!agent) throw new Error('Agent not found or inactive');
 
@@ -119,6 +113,9 @@ export const assignChatToAgent = async (clientId, chatId, agentId) => {
       chatId,
       `🤝 You are now connected with ${agentName}`
     );
+
+// 🚀 Count this message towards subscription
+  await incrementUsage(sub._id, 1);
     console.log(`📤 Notified ${chatId}: transferred to ${agentName}`);
   } else {
     console.warn(`⚠️ No WA client found for ${clientId} → cannot send transfer message`);

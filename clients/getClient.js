@@ -431,23 +431,27 @@ if(sent){
 /* ------------------------------- New Message ------------------------------ */
 client.on('message', async (msg) => {
   try {
+
+  // Check subscription & quota before sending
+  const { sub } = await assertCanSendMessage(clientId);
+
     console.log('📨 New message received from:', msg.from, 'Body:', msg.body);
 
     // -----------------------------------------------------------------------
     // Helpers (MUST be declared before they’re used)
     // -----------------------------------------------------------------------
 
-const bodyLower = (msg.body || '').toLowerCase().trim();
-    const sendNodeMessage = async (node) => {
-    if (node.type === 'send_message') {
-  const text = node.data?.message || node.data?.config?.message || '';
-  if (text) {
-    const sent = await client.sendMessage(msg.from, text);
-    console.log('📤 Text message sent:', text);
+        const bodyLower = (msg.body || '').toLowerCase().trim();
+            const sendNodeMessage = async (node) => {
+            if (node.type === 'send_message') {
+          const text = node.data?.message || node.data?.config?.message || '';
+          if (text) {
+            const sent = await client.sendMessage(msg.from, text);
+            console.log('📤 Text message sent:', text);
 
-  }
-  return true;
-}
+          }
+          return true;
+        }
 
 
       if (node.type === 'template') {
@@ -456,6 +460,7 @@ const bodyLower = (msg.body || '').toLowerCase().trim();
           const template = await Template.findById(tplId);
           if (template?.body) {
             await client.sendMessage(msg.from, template.body);
+
             console.log('📤 Template message sent (as text):', template.body);
           }
         }
@@ -490,6 +495,9 @@ const bodyLower = (msg.body || '').toLowerCase().trim();
     await client.sendMessage(msg.from, `🤝 You are now connected with ${agentName}`);
     console.log(`📤 Sent assignment message to ${msg.from}`);
 
+      // 🚀 Count this message towards subscription
+  await incrementUsage(sub._id, 1);
+
     // ✅ Start inactivity timeout ONLY after agent connected
     if (inactivityTimers.has(msg.from)) {
       clearTimeout(inactivityTimers.get(msg.from));
@@ -511,13 +519,16 @@ const bodyLower = (msg.body || '').toLowerCase().trim();
           msg.from,
           "⏳ This chat has been closed due to inactivity. Please send a new message to restart."
         );
+        // 🚀 Count this message too
+    await incrementUsage(sub._id, 1);
+
       }, 60 * 1000) // 1 minute
     );
-  } 
-  
-  // else {
-  //   await client.sendMessage(msg.from, "⚠️ Sorry, no agent available right now.");
-  // }
+  } else {
+    await client.sendMessage(msg.from, "⚠️ Sorry, no agents are available right now. Please try again later.");
+          // 🚀 Count this message towards subscription
+  await incrementUsage(sub._id, 1);
+  }
 
   return 'agent_assigned';
 }
@@ -607,10 +618,10 @@ inactivityTimers.set(
 
     global.io?.to(clientId).emit('chat-closed', { chatId: msg.from });
 
-    await client.sendMessage(
-      msg.from,
-      "⏳ This chat has been closed due to inactivity."
-    );
+    // await client.sendMessage(
+    // msg.from,"⏳ This chat has been closed due to inactivity."
+    // );
+    
   }, 5 * 60 * 1000) // 5 minutes
 );
 
@@ -842,6 +853,10 @@ const isRestart = restartKeywords.some(k =>
     console.error('❌ Message handler error:', err);
   }
 });
+
+
+
+
 
 
 
