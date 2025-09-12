@@ -8,15 +8,42 @@ async function run() {
 
   const docs = [
     {
+      code: 'FREE_MONTHLY',
+      name: 'FREE (Monthly)',
+      months: 1,
+      price: 0,
+      currency: 'USD',
+      messageLimit: 60,
+      features: [
+        'Inbox (multi-chat + advanced filters)',
+        'Campaigns (bulk sends)',
+        'Templates',
+        'Automation',
+        'Analytics (message stats, response time)',
+        'Contacts management',
+        'Agent seats',
+        'Labels',
+        'API Keys access',
+      ],
+      isActive: true,
+      sortOrder: 0,
+      status: 'public'
+    },
+    {
       code: 'BASIC_MONTHLY',
       name: 'Basic (Monthly)',
       months: 1,
-      price: 10,
+      price: 11,
       currency: 'USD',
-      messageLimit: 1000,                 // ← added
-      features: ['Email support', 'Basic analytics'],
+      messageLimit: 1000,
+      features: [
+        'Inbox (basic chat handling)',
+        'Contacts management',
+        'Labels'
+      ],
       isActive: true,
-      sortOrder: 1
+      sortOrder: 1,
+      status: 'public'
     },
     {
       code: 'PRO_MONTHLY',
@@ -24,10 +51,21 @@ async function run() {
       months: 1,
       price: 25,
       currency: 'USD',
-      messageLimit: 10000,                // ← added
-      features: ['Priority support', 'Advanced analytics'],
+      messageLimit: 10000,
+      features: [
+        'Inbox (multi-chat + advanced filters)',
+        'Campaigns (bulk sends)',
+        'Templates (unlimited)',
+        'Automation (advanced flows + triggers)',
+        'Analytics (message stats, response time)',
+        'Contacts management',
+        'Up to 5 Agent seats',
+        'Labels',
+        'API Keys access'
+      ],
       isActive: true,
-      sortOrder: 2
+      sortOrder: 2,
+      status: 'public'
     },
     {
       code: 'PRO_YEARLY',
@@ -35,10 +73,46 @@ async function run() {
       months: 12,
       price: 250,
       currency: 'USD',
-      messageLimit: 120000,               // ← added
-      features: ['Priority support', 'Advanced analytics', 'Yearly discount'],
+      messageLimit: 120000,
+      features: [
+        'Inbox (multi-chat + advanced filters)',
+        'Campaigns (bulk sends)',
+        'Templates (unlimited)',
+        'Automation (advanced flows + triggers)',
+        'Analytics (message stats, response time)',
+        'Contacts management',
+        'Up to 5 Agent seats',
+        'Labels',
+        'API Keys access',
+        'Yearly discount'
+      ],
       isActive: true,
-      sortOrder: 3
+      sortOrder: 3,
+      status: 'public'
+    },
+    {
+      code: 'ENTERPRISE_PRIVATE',
+      name: 'Enterprise (Private)',
+      months: 12,
+      price: 1000,
+      currency: 'USD',
+      messageLimit: 1000000,
+      features: [
+        'Inbox (unlimited chats + routing)',
+        'Campaigns (advanced segmentation)',
+        'Templates (unlimited + custom approvals)',
+        'Automation (AI-powered workflows)',
+        'Analytics (custom dashboards, exports)',
+        'Contacts management ',
+        'Unlimited Agent seats',
+        'Labels',
+        'Subscription management',
+        'API Keys + Webhooks',
+        'Dedicated account manager'
+      ],
+      isActive: true,
+      sortOrder: 99999,
+      status: 'private' // hidden from normal users
     }
   ];
 
@@ -46,7 +120,7 @@ async function run() {
     await Plan.updateOne({ code: d.code }, { $set: d }, { upsert: true });
   }
 
-  //console.log('✅ Plans seeded/updated');
+  console.log('✅ Plans seeded/updated');
   process.exit(0);
 }
 
