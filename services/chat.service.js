@@ -26,6 +26,11 @@ export const autoAssignChat = async (clientId, chatId, chatName = '') => {
     });
     if (existingAgent) {
       return chat;
+    } else {
+      // ❌ reset stale assignment
+      chat.agentId = null;
+      chat.status = 'pending';
+      await chat.save();
     }
   }
 
@@ -41,7 +46,9 @@ export const autoAssignChat = async (clientId, chatId, chatName = '') => {
         `⚠️ Sorry, no agents are available right now. Please try again later.`
       );
     }
-    return chat || null;
+
+    // 🚫 Always return null here so handler won't send 🤝
+    return null;
   }
 
   // Pick agent via round robin
@@ -73,6 +80,7 @@ export const autoAssignChat = async (clientId, chatId, chatName = '') => {
 
   return chat;
 };
+
 
 
 /**
