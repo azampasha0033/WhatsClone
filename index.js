@@ -46,6 +46,7 @@ import { startScheduledMessageSender } from './scheduler/scheduledMessageSender.
 import scheduleMessageRoute from './routes/scheduleMessage.js';
 
 import { Chat } from './models/Chat.js'; // make sure this is imported
+import { webchatRoutes, initWebChatSocket } from "./routes/webchat/index.js";
 
 
 // import usersList from './routes/users-list.js';
@@ -71,6 +72,12 @@ app.use(cors());
 app.use(express.json());
 
 startScheduledMessageSender();
+
+// Web Chat Wedget Initialize socket logic
+
+app.use("/api/webchat", webchatRoutes);
+initWebChatSocket(io);
+
 
 // Routes
 app.use('/api/chats', chatRoutes);
