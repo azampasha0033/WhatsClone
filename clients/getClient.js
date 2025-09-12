@@ -513,10 +513,11 @@ const bodyLower = (msg.body || '').toLowerCase().trim();
         );
       }, 60 * 1000) // 1 minute
     );
-
-  } else {
-    await client.sendMessage(msg.from, "⚠️ Sorry, no agent available right now.");
-  }
+  } 
+  
+  // else {
+  //   await client.sendMessage(msg.from, "⚠️ Sorry, no agent available right now.");
+  // }
 
   return 'agent_assigned';
 }
