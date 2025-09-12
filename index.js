@@ -1,14 +1,13 @@
 // index.js (fixed and complete with QR & status JSON + ngrok fallback check)
 import 'dotenv/config';
 import express from 'express';
+
 import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import { connectDB } from './db/mongo.js';
 import { ClientModel } from './db/clients.js';
-
-
 
 
 import fs from 'fs';
@@ -74,7 +73,7 @@ app.use(express.json());
 startScheduledMessageSender();
 
 // Web Chat Wedget Initialize socket logic
-
+app.use("/widget", express.static(path.join(process.cwd(), "public")));
 app.use("/api/webchat", webchatRoutes);
 initWebChatSocket(io);
 
