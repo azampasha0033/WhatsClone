@@ -16,37 +16,47 @@ let lastAssignedIndex = 0;
 export const autoAssignChat = async (clientId, chatId, chatName = '') => {
   let chat = await Chat.findOne({ clientId, chatId });
 
-  // If already assigned, return
-  if (chat && chat.agentId) return chat;
+  // If already assigned to a valid online agent, return as is
+  if (chat?.agentId) {
+    const existingAgent = await AgentModel.findOne({ 
+      _id: chat.agentId, 
+      clientId, 
+      status: 'active', 
+      online: true 
+    });
+    if (existingAgent) {
+      return chat;
+    }
+  }
 
-  // Get active agents
-const agents = await AgentModel.find({ clientId, online: true, status: 'active' }).sort({ createdAt: 1 });
-
-
-
+  // Get only available agents
+  const agents = await AgentModel.find({ clientId, online: true, status: 'active' }).sort({ createdAt: 1 });
   if (!agents.length) {
-    const client = getClient(clientId);  // <-- pull WhatsApp client from your sessions
-
+    const client = getClient(clientId);
     console.warn(`⚠️ No agents available for client ${clientId}`);
 
-        await client.sendMessage(
-      chatId,
-      `Sorry No agents available at the moment. Please try again later.`
-    );
+    if (client) {
+      await client.sendMessage(
+        chatId,
+        `⚠️ Sorry, no agents are available right now. Please try again later.`
+      );
+    }
     return chat || null;
   }
 
-  // Pick agent round-robin
+  // Pick agent via round robin
   const agent = agents[lastAssignedIndex % agents.length];
   lastAssignedIndex++;
 
+  // Assign chat to selected agent
   if (!chat) {
     chat = await Chat.create({
       clientId,
       chatId,
       name: chatName,
       agentId: agent._id,
-      status: 'assigned'
+      status: 'assigned',
+      updatedAt: new Date()
     });
   } else {
     chat.agentId = agent._id;
