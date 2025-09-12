@@ -8,7 +8,7 @@
   document.head.appendChild(script);
 
   function init() {
-    const socket = io("https://whatschat.nexoratool.com", { // change to your server domain
+    const socket = io("https://whatsclone-copy-production.up.railway.app", { // change to your server domain
       query: { clientId, channel: "web" }
     });
 
