@@ -24,6 +24,7 @@ async function run() {
         'Agent seats',
         'Labels',
         'API Keys access',
+        'Messages Limit: 60 messages/month',
       ],
       isActive: true,
       sortOrder: 0,
@@ -39,7 +40,8 @@ async function run() {
       features: [
         'Inbox (basic chat handling)',
         'Contacts management',
-        'Labels'
+        'Labels',
+         'Messages Limit: 1,000 messages/month',
       ],
       isActive: true,
       sortOrder: 1,
@@ -61,7 +63,8 @@ async function run() {
         'Contacts management',
         'Up to 5 Agent seats',
         'Labels',
-        'API Keys access'
+        'API Keys access',
+         'Messages Limit: 10,000 messages/month',
       ],
       isActive: true,
       sortOrder: 2,
@@ -84,7 +87,8 @@ async function run() {
         'Up to 5 Agent seats',
         'Labels',
         'API Keys access',
-        'Yearly discount'
+        'Yearly discount',
+         'Messages Limit: 120,000 messages/year',
       ],
       isActive: true,
       sortOrder: 3,
@@ -108,11 +112,38 @@ async function run() {
         'Labels',
         'Subscription management',
         'API Keys + Webhooks',
-        'Dedicated account manager'
+        'Dedicated account manager',
+         'Messages Limit: 1,000,000 messages/year',
       ],
       isActive: true,
       sortOrder: 99999,
-      status: 'private' // hidden from normal users
+      status: 'public' // hidden from normal users
+    }
+    ,
+    {
+      code: 'PRIVATE',
+      name: 'PRIVATE (ChatON)',
+      months: 5900,
+      price: 1000,
+      currency: 'USD',
+      messageLimit: 1000000000,
+      features: [
+        'Inbox (unlimited chats + routing)',
+        'Campaigns (advanced segmentation)',
+        'Templates (unlimited + custom approvals)',
+        'Automation (AI-powered workflows)',
+        'Analytics (custom dashboards, exports)',
+        'Contacts management ',
+        'Unlimited Agent seats',
+        'Labels',
+        'Subscription management',
+        'API Keys + Webhooks',
+        'Dedicated account manager',
+         'Messages Limit: 1,000,000 messages/year',
+      ],
+      isActive: true,
+      sortOrder: 99999,
+      status: 'private' 
     }
   ];
 

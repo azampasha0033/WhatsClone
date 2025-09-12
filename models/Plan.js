@@ -13,7 +13,12 @@ const PlanSchema = new mongoose.Schema(
     features: [{ type: String }],
     messageLimit: { type: Number },   // optional usage limits
     isActive: { type: Boolean, default: true },
-    sortOrder: { type: Number, default: 0 } // for ordering in UI
+    sortOrder: { type: Number, default: 0 },
+    status: { 
+      type: String, 
+      enum: ['public', 'private'], 
+      default: 'public' 
+    }
   },
   { timestamps: true }
 );
