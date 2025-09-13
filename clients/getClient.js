@@ -217,6 +217,10 @@ if(sent){
     console.log("Page not found or already hooked for joined event");
   }
 
+
+
+
+  
   if (page && !page.__consoleHooked) {
     // Pipe WA console logs
     page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
