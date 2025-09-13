@@ -11,6 +11,7 @@ export async function validateApiKey(clientId, apiKey) {
     console.log('API KEY HERE 1'+apiKey);
   const client = await ClientModel.findOne({ clientId });
 
+console.log(client);
 
   if (!client || client.apiKey !== apiKey) {
     throw new Error('Invalid API key here ');
