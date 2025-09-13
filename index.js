@@ -124,7 +124,7 @@ if (!fs.existsSync(sessionsPath)) {
 app.get('/chats/:clientId', async (req, res) => {
   try {
     let { clientId } = req.params;
-     const { apiKey } = req.headers; // API Key passed in headers
+    const apiKey = req.headers['apikey'] || req.headers['apiKey'];  // Handle both cases
 
      console.log('Request Headers:', req.headers);
 
@@ -203,13 +203,14 @@ app.get('/messages/:clientId/:chatId', async (req, res) => {
   try {
     const { clientId, chatId } = req.params;
 
-  const { apiKey } = req.headers; // Assuming API key is passed in headers
+   const apiKey = req.headers['apikey'] || req.headers['apiKey'];  // Handle both cases
+
     const order = (req.query.order || 'desc').toLowerCase(); // 'asc' | 'desc'
     const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
 
   console.log('Request Headers:', req.headers);
 
-  
+
     // Validate API key
     if (!apiKey) {
       return res.status(400).json({ error: 'API key is required' });
