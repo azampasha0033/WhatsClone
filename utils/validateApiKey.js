@@ -6,15 +6,17 @@ import { ClientModel } from '../db/clients.js';
  * @throws {Error} If the API key is invalid.
  */
 export async function validateApiKey(clientId, apiKey) {
+  if (!apiKey) {
+    throw new Error('API key is missing');
+  }
 
-    console.log('client id 1'+clientId);
-    console.log('API KEY HERE 1'+apiKey);
+  console.log('client id: ', clientId);
+  console.log('API KEY: ', apiKey);
+
   const client = await ClientModel.findOne({ clientId });
 
-console.log(client);
-
   if (!client || client.apiKey !== apiKey) {
-    throw new Error('Invalid API key here ');
+    throw new Error('Invalid API key');
   }
 }
 
