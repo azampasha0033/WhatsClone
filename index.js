@@ -48,7 +48,7 @@ import { Chat } from './models/Chat.js'; // make sure this is imported
 import { webchatRoutes, initWebChatSocket } from "./routes/webchat/index.js";
 
 
-import { validateApiKey } from './utils/validateApiKey'; // Adjust the path as per your file structure
+import { validateApiKey } from './utils/validateApiKey.js'; // Adjust the path as per your file structure
 
 
 
