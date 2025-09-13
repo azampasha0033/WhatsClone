@@ -126,6 +126,8 @@ app.get('/chats/:clientId', async (req, res) => {
     let { clientId } = req.params;
      const { apiKey } = req.headers; // API Key passed in headers
 
+console.log(apiKey);
+
     // Step 1: Validate the API key
     await validateApiKey(clientId, apiKey);  // Validate the API key for the client
 
@@ -197,6 +199,8 @@ app.get('/messages/:clientId/:chatId', async (req, res) => {
     const order = (req.query.order || 'desc').toLowerCase(); // 'asc' | 'desc'
     const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
 
+    console.log(apiKey);
+    
     // Step 1: Validate API key
     await validateApiKey(clientId, apiKey); // Validate API key for the client
 
