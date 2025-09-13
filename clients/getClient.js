@@ -167,7 +167,7 @@ client.on('authenticated', async () => {
     { $set: { sessionStatus: 'connected' } }
   ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
 
-  
+
       }
     }, 3000);
   } catch (err) {
@@ -239,10 +239,10 @@ if(sent){
       readyFlags.set(clientId, false);
       sessionStatus.set(clientId, 'disconnected');
 
-      await ClientModel.updateOne(
-        { clientId },
-        { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'PAGE_CLOSED' } }
-      ).catch(() => null);
+      // await ClientModel.updateOne(
+      //   { clientId },
+      //   { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'PAGE_CLOSED' } }
+      // ).catch(() => null);
 
       try { await client.destroy(); } catch {}
       clients.delete(clientId);
