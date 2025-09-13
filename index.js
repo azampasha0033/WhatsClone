@@ -48,6 +48,10 @@ import { Chat } from './models/Chat.js'; // make sure this is imported
 import { webchatRoutes, initWebChatSocket } from "./routes/webchat/index.js";
 
 
+import { validateApiKey } from './utils/validateApiKey'; // Adjust the path as per your file structure
+
+
+
 // import usersList from './routes/users-list.js';
 
 if (process.env.NODE_ENV === 'development') {
@@ -120,6 +124,11 @@ if (!fs.existsSync(sessionsPath)) {
 app.get('/chats/:clientId', async (req, res) => {
   try {
     let { clientId } = req.params;
+     const { apiKey } = req.headers; // API Key passed in headers
+
+    // Step 1: Validate the API key
+    await validateApiKey(clientId, apiKey);  // Validate the API key for the client
+
 
     // 🔑 If we receive a Mongo ObjectId, resolve it to real clientId
     if (mongoose.Types.ObjectId.isValid(clientId)) {
@@ -183,8 +192,15 @@ app.get('/chats/:clientId', async (req, res) => {
 app.get('/messages/:clientId/:chatId', async (req, res) => {
   try {
     const { clientId, chatId } = req.params;
+
+  const { apiKey } = req.headers; // Assuming API key is passed in headers
     const order = (req.query.order || 'desc').toLowerCase(); // 'asc' | 'desc'
     const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
+
+    // Step 1: Validate API key
+    await validateApiKey(clientId, apiKey); // Validate API key for the client
+
+
 
     const client = await safeGetClient(clientId);
     if (!client) {
@@ -296,7 +312,7 @@ const startServer = async () => {
       console.log('⚠️ No active clients found.');
     }
 
-    
+
     // Initialize each WhatsApp client
     await Promise.all(
       activeClients.map(async ({ clientId }) => {

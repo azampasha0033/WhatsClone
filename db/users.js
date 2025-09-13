@@ -11,17 +11,13 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true
     },
-
     passwordHash: { type: String, required: true, select: false },
-
     phoneRaw:   { type: String, required: true, trim: true },
     phoneE164:  { type: String, required: true, unique: true }, // unique implies index
     phoneVerified: { type: Boolean, default: false },
-
     otpHash:          { type: String, default: null, select: false },
     otpExpiresAt:     { type: Date,   default: null },
     otpAttemptCount:  { type: Number, default: 0, min: 0, max: 10 },
-
     resetOtpHash:         { type: String, default: null, select: false },
     resetOtpExpiresAt:    { type: Date,   default: null },
     resetOtpAttemptCount: { type: Number, default: 0, min: 0, max: 10 },
