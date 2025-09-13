@@ -173,6 +173,13 @@ client.on('authenticated', async () => {
   client.on('ready', async () => {
 
     console.log(`✅ Client ready: ${clientId}`);
+
+  await ClientModel.updateOne(
+    { clientId },
+    { $set: { sessionStatus: 'connected' } }
+  ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
+
+
     qrCodes.set(clientId, null);
     readyFlags.set(clientId, true);
     sessionStatus.set(clientId, 'connected');

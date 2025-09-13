@@ -73,9 +73,9 @@ app.use(express.json());
 startScheduledMessageSender();
 
 // Web Chat Wedget Initialize socket logic
-app.use("/widget", express.static(path.join(process.cwd(), "public")));
-app.use("/api/webchat", webchatRoutes);
-initWebChatSocket(io);
+// app.use("/widget", express.static(path.join(process.cwd(), "public")));
+// app.use("/api/webchat", webchatRoutes);
+// initWebChatSocket(io);
 
 
 // Routes
