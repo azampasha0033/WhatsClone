@@ -228,57 +228,61 @@ if(sent){
 
 
 
-  if (page && !page.__consoleHooked) {
-    // Pipe WA console logs
-    page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
-    page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
-    page.on('pageerror', (e) => console.warn('📄[WA] PAGEEXCEPTION', e?.message || e));
+//   if (page && !page.__consoleHooked) {
+//     // Pipe WA console logs
+//     page.on('console', (m) => console.log('📄[WA] LOG', m.text()));
+//     page.on('error', (e) => console.warn('📄[WA] PAGE ERROR', e?.message || e));
+//     page.on('pageerror', (e) => console.warn('📄[WA] PAGEEXCEPTION', e?.message || e));
 
-    page.on('close', async () => {
-      console.warn(`⚠️ Puppeteer page closed for ${clientId}`);
-      readyFlags.set(clientId, false);
-      sessionStatus.set(clientId, 'disconnected');
+//     page.on('close', async () => {
+//       console.warn(`⚠️ Puppeteer page closed for ${clientId}`);
+//       readyFlags.set(clientId, false);
+//       sessionStatus.set(clientId, 'disconnected');
 
-      // await ClientModel.updateOne(
-      //   { clientId },
-      //   { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'PAGE_CLOSED' } }
-      // ).catch(() => null);
+//       // await ClientModel.updateOne(
+//       //   { clientId },
+//       //   { $set: { sessionStatus: 'disconnected', lastDisconnectedAt: new Date(), lastDisconnectReason: 'PAGE_CLOSED' } }
+//       // ).catch(() => null);
 
-      try { await client.destroy(); } catch {}
-      clients.delete(clientId);
-      qrCodes.delete(clientId);
-      readyFlags.delete(clientId);
-      sessionStatus.delete(clientId);
-    });
+//       try { await client.destroy(); } catch {}
+//       clients.delete(clientId);
+//       qrCodes.delete(clientId);
+//       readyFlags.delete(clientId);
+//       sessionStatus.delete(clientId);
+//     });
 
-    // 🔥 Inject hook into WhatsApp Web to intercept WebRTC connections
-   await page.evaluate(() => {
-  const OrigPC = window.RTCPeerConnection;
-  window.RTCPeerConnection = function(...args) {
-    const pc = new OrigPC(...args);
-    console.log("✅ Hooked into WA PeerConnection");
+//     // 🔥 Inject hook into WhatsApp Web to intercept WebRTC connections
+//    await page.evaluate(() => {
+//   const OrigPC = window.RTCPeerConnection;
+//   window.RTCPeerConnection = function(...args) {
+//     const pc = new OrigPC(...args);
+//     console.log("✅ Hooked into WA PeerConnection");
 
-    pc.addEventListener("track", (event) => {
-      if (event.track.kind === "audio") {
-        console.log("🎤 Got audio from WA call");
-        // TODO: forward audio via WebSocket to backend
-      }
-    });
+//     pc.addEventListener("track", (event) => {
+//       if (event.track.kind === "audio") {
+//         console.log("🎤 Got audio from WA call");
+//         // TODO: forward audio via WebSocket to backend
+//       }
+//     });
 
-    const sender = pc.addTrack; // save reference
-    pc.addTrack = function(track, ...rest) {
-      console.log("📢 Bot can inject audio here");
-      return sender.call(this, track, ...rest);
-    };
+//     const sender = pc.addTrack; // save reference
+//     pc.addTrack = function(track, ...rest) {
+//       console.log("📢 Bot can inject audio here");
+//       return sender.call(this, track, ...rest);
+//     };
 
-    return pc;
-  };
-});
+//     return pc;
+//   };
+// });
 
 
-    page.__consoleHooked = true;
-    console.log('🔌 ready: page console piping enabled + WebRTC hook added');
-  }
+//     page.__consoleHooked = true;
+//     console.log('🔌 ready: page console piping enabled + WebRTC hook added');
+//   }
+
+
+
+
 } catch (e) {
   console.warn('⚠️ ready: console pipe failed:', e?.message);
 }
