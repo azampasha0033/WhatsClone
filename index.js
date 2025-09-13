@@ -296,6 +296,7 @@ const startServer = async () => {
       console.log('⚠️ No active clients found.');
     }
 
+    
     // Initialize each WhatsApp client
     await Promise.all(
       activeClients.map(async ({ clientId }) => {
