@@ -161,6 +161,13 @@ client.on('authenticated', async () => {
           await saveChat(clientId, chat);
         }
         console.log(`🔄 Forced sync for already-connected client ${clientId}`);
+
+          await ClientModel.updateOne(
+    { clientId },
+    { $set: { sessionStatus: 'connected' } }
+  ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
+
+  
       }
     }, 3000);
   } catch (err) {
@@ -220,7 +227,7 @@ if(sent){
 
 
 
-  
+
   if (page && !page.__consoleHooked) {
     // Pipe WA console logs
     page.on('console', (m) => console.log('📄[WA] LOG', m.text()));

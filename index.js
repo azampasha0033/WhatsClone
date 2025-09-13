@@ -116,32 +116,6 @@ if (!fs.existsSync(sessionsPath)) {
   console.log('✅ Session folder exists →', sessionsPath);
 }
 
-/* -------------------------------------------------------------------------- */
-/*                            SAFE CLIENT WRAPPER                             */
-/* -------------------------------------------------------------------------- */
-// async function safeGetClient(clientId) {
-//   const client = getClient(clientId);
-//   if (!client) return null;
-
-//   if (!client.pupPage || client.pupPage.isClosed()) {
-//     console.warn(`⚠️ Client ${clientId}: Puppeteer page is closed. Recycling...`);
-//     try { await client.destroy(); } catch {}
-//     await getClient(clientId); // restart
-//     return null;
-//   }
-
-//   if (!isClientReady(clientId)) {
-//     console.warn(`⚠️ Client ${clientId} not ready yet.`);
-//     return null;
-//   }
-
-//   return client;
-// }
-
-/* -------------------------------------------------------------------------- */
-/*                                 ROUTES                                     */
-/* -------------------------------------------------------------------------- */
-
 // ✅ Chats
 app.get('/chats/:clientId', async (req, res) => {
   try {
