@@ -325,7 +325,6 @@ const startServer = async () => {
         console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate.`);
         return;
       }
-
       socket.join(clientId);
 
       // Send session status to the client
