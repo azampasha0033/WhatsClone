@@ -285,62 +285,87 @@ app.get('/', (req, res) => res.send('👋 Hello from WhatsApp Web API!'));
 const PORT = process.env.PORT || 8080;
 
 const startServer = async () => {
-  await connectDB();
-
   try {
+    // Step 1: Connect to the database
+    await connectDB();
+    console.log('✅ Database connection successful.');
+
+    // Step 2: Fetch active clients with sessionStatus 'connected'
     const activeClients = await ClientModel.find({ sessionStatus: 'connected' }, 'clientId');
+    
+    // If no clients found, log a message and return
+    if (!activeClients || activeClients.length === 0) {
+      console.log('⚠️ No active clients found with sessionStatus "connected"');
+      return;
+    }
+
+    // Step 3: Initialize WhatsApp clients for each active client
     await Promise.all(
       activeClients.map(async ({ clientId }) => {
         try {
+          console.log(`🔄 Attempting to initialize client with ID: ${clientId}`);
+          
+          // Initialize client
           await getClient(clientId);
+          
+          // Log success
           console.log(`✅ Initialized WhatsApp client for: ${clientId}`);
         } catch (err) {
+          // Handle client initialization failure
           console.error(`❌ Failed to initialize client ${clientId}:`, err.message);
         }
       })
     );
   } catch (err) {
     console.error('❌ Error fetching clients on startup:', err.message);
+    // Optionally exit the process if the startup process fails critically
+    process.exit(1);
   }
 
-io.on('connection', (socket) => {
-//  console.log('🔌 Socket.io client connected');
+  // Step 4: Setup socket.io and handle connections
+  io.on('connection', (socket) => {
+    console.log('🔌 Socket.io client connected');
 
-  socket.on('join-client-room', (clientId) => {
-    if (!clientId) return;
-    console.log('📡 join-client-room received:', clientId);
+    socket.on('join-client-room', (clientId) => {
+      if (!clientId) {
+        console.log('⚠️ No clientId provided, ignoring join attempt.');
+        return;
+      }
 
-    // prevent duplicate joins
-    if (socket.rooms.has(clientId)) {
-      console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
-      return;
-    }
+      console.log('📡 join-client-room received:', clientId);
 
-    socket.join(clientId);
+      // Prevent duplicate joins (clients can't join the same room twice)
+      if (socket.rooms.has(clientId)) {
+        console.log(`⚠️ Already joined room ${clientId}, ignoring duplicate`);
+        return;
+      }
 
-    // immediately send current session status
-    const status = sessionStatus.get(clientId) || 'disconnected';
-    socket.emit('session-status', { clientId, status });
+      socket.join(clientId);
+
+      // Immediately send current session status to the client
+      const status = sessionStatus.get(clientId) || 'disconnected';
+      socket.emit('session-status', { clientId, status });
+    });
+
+    socket.on('disconnect', () => {
+      console.log(`❌ Socket disconnected (id=${socket.id})`);
+    });
   });
 
-  socket.on('disconnect', () => {
-    console.log(`❌ Socket disconnected (id=${socket.id})`);
-  });
-});
-
-
-
-
+  // Step 5: Start the server
   server.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`❌ Port ${PORT} is already in use.`);
-      process.exit(1);
+      process.exit(1); // Exit the process if the port is already in use
     } else {
-      throw err;
+      console.error('❌ Server error:', err);
+      throw err; // Rethrow for debugging purposes
     }
   });
 };
 
+// Step 6: Start the server
 startServer();
+
