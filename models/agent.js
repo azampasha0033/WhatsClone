@@ -58,8 +58,9 @@ lastSeenAt: { type: Date, default: null },
   { timestamps: true }
 );
 
-// Ensure uniqueness *per owner* (same email/phone can exist under different owners)
-agentSchema.index({ clientId: 1, email: 1 }, { unique: true });
+
+// Ensure uniqueness of email across all clients (globally)
+agentSchema.index({ email: 1 }, { unique: true });
 
 export const AgentModel = mongoose.model('Agent', agentSchema);
 
