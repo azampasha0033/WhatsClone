@@ -167,7 +167,6 @@ client.on('authenticated', async () => {
     { $set: { sessionStatus: 'connected' } }
   ).catch((e) => console.warn('⚠️ ClientModel pending warn:', e?.message));
 
-
       }
     }, 3000);
   } catch (err) {
